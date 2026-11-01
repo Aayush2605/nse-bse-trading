@@ -7,7 +7,10 @@ description: >-
   from the higher of the plan's entry and a fresh price), reward:risk must
   meet your minimum, the day's total risk must fit your daily loss limit, no
   more than your trades per day, and no new entries outside your entry
-  window or when the market is closed. It also keeps the basics: blocked
+  window or when the market is closed. Indian rules: blocks trade-for-trade
+  (T2T) stocks, stocks on NSE's ASM/GSM surveillance lists, an entry within
+  1% of the upper circuit and a stop under the lower circuit (run
+  `check.py --refresh-rules` once a day). It also keeps the basics: blocked
   tickers, order size, position cap, cash buffer, margin, short sales,
   options and crypto, malformed or bad bracket orders, duplicates and a daily
   order limit. Getting out is never blocked by a day limit. Prints PASS or

@@ -110,5 +110,40 @@ class Charges(unittest.TestCase):
         self.assertIn("charges", s["refusal"])
 
 
+class MarketRules(unittest.TestCase):
+    RULES = {"prev_close_date": "2026-10-30", "stocks": {
+        "ABAN": {"series": "BE", "band_pct": 2.0, "t2t": True, "prev_close": 14.38},
+        "21STCENMGM": {"series": "EQ", "band_pct": 5.0, "surveillance": "LTASM - Stage I", "prev_close": 40.0},
+        "ABANSENT": {"series": "EQ", "band_pct": 5.0, "prev_close": 26.79},
+        "ICICIBANK": {"series": "EQ", "band_pct": None, "prev_close": 1390.0},
+        "AXIOMGAS-SM.NS": {"series": "SM", "band_pct": 5.0, "t2t": True}}}
+
+    def why(self, sym, ref, stop, **cfg):
+        c = dict(risk.DEFAULTS, **cfg)
+        return risk.india_reasons(sym, ref, stop, self.RULES, c, "2026-11-02")
+
+    def test_t2t_surveillance_and_circuits_block(self):
+        self.assertTrue(self.why("ABAN.NS", 14.38, 14.0)[0][0].startswith("t2t:"))
+        self.assertTrue(self.why("AXIOMGAS-SM.NS", 50, 49)[0][0].startswith("t2t:"))
+        self.assertTrue(self.why("21STCENMGM", 40, 39)[0][0].startswith("surveillance:"))
+        self.assertEqual(self.why("21STCENMGM", 40, 39, allow_surveillance=True)[0], [])
+        self.assertTrue(self.why("ABANSENT", 28.00, 27.5)[0][0].startswith("circuit: entry"))   # upper 28.13
+        self.assertTrue(self.why("ABANSENT", 26.79, 25.40)[0][0].startswith("circuit: stop"))   # lower 25.45
+        self.assertEqual(self.why("ABANSENT", 26.79, 26.0)[0], [])
+
+    def test_fno_stocks_and_missing_rules_only_warn(self):
+        r, w = self.why("ICICIBANK.NS", 1394.5, 1387.15)
+        self.assertEqual(r, [])
+        self.assertIn("no fixed price band", w[0])
+        r, w = risk.india_reasons("RELIANCE", 1, 0.9, None, risk.DEFAULTS, "2026-11-02")
+        self.assertEqual(r, [])
+        self.assertIn("--refresh-rules", w[0])
+
+    def test_stale_rules_warn(self):
+        rules = dict(self.RULES, prev_close_date="2026-10-28")
+        w = risk.india_reasons("ABANSENT", 26.79, 26.0, rules, risk.DEFAULTS, "2026-11-02")[1]
+        self.assertIn("refresh", w[0])
+
+
 if __name__ == "__main__":
     unittest.main()

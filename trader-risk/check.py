@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-trade risk check for trader-risk. Standard library only, no network.
+"""Pre-trade risk check for trader-risk. Standard library only. Only --refresh-rules uses the network.
 
 Reads the proposed orders (trader/orders.json) and checks every one against
 your rules (trader/config.json), your account (trader/portfolio.json),
@@ -12,6 +12,7 @@ a limit together are caught.
     python3 check.py --now "2026-10-19 10:15"        # pin the clock (India time (IST))
     python3 check.py --orders trader/orders.json --json
     python3 check.py --no-write                      # check without recording the verdicts
+    python3 check.py --refresh-rules                 # once a day: NSE bands, ASM/GSM -> trader/market_rules.json
 
 Entries and exits. An ENTRY opens or adds to a position (a buy, or a sell
 that would go short). An EXIT only reduces what you hold. Getting out must
@@ -51,6 +52,16 @@ What blocks an entry (on top):
                 time), or the market is closed (weekend, NSE holiday, outside
                 9:15 to the close; on a 1:00 p.m. early close the window ends
                 3 hours earlier too)
+  t2t           a trade-for-trade stock (NSE BE/BZ/SME, BSE T/XT/Z...): delivery
+                only, so an intraday square-off is not possible
+  surveillance  on NSE's ASM or GSM list (extra margins, price bands, often
+                T2T), unless "allow_surveillance": true
+  circuit       the entry within circuit_buffer_pct (1) of the upper circuit
+                (the stock can freeze there), or the stop under the lower
+                circuit (a locked lower circuit means no buyers: you cannot
+                get out). Circuits are previous close x (1 +/- band).
+                These three need trader/market_rules.json (--refresh-rules);
+                without it, or when it is stale, they are a warning.
   pdt           only with "pdt_guard": true: 3 day trades already in the last
                 5 business days (a 4th would trip the old pattern-day-trader rule)
 
@@ -68,6 +79,7 @@ import re
 import sys
 
 DEFAULTS = {
+    "allow_surveillance": False, "circuit_buffer_pct": 1.0,
     "budget": None, "cash_buffer_pct": 10, "max_position_pct": 75, "max_order_usd": 40000,
     "min_order_usd": 500, "max_loss_per_trade_usd": 500, "max_daily_loss_usd": 1500, "max_trades_per_day": 3,
     "max_orders_per_day": 10, "min_reward_risk": 1.0, "require_stop": True,
@@ -347,7 +359,154 @@ def day_trades(state, today):
 
 # ---------------------------------------------------------------- the check
 
-def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=None, price_times=None):
+RULES_SOURCES = {
+    "bands": "https://archives.nseindia.com/content/equities/sec_list.csv",
+    "asm": "https://www.nseindia.com/api/reportASM",
+    "gsm": "https://www.nseindia.com/api/reportGSM",
+    "bhav": "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_%s_F_0000.csv.zip",
+}
+SME_SERIES = {"SM", "ST", "SZ"}
+T2T_SERIES = {"BE", "BZ"} | SME_SERIES
+
+
+def nse_key(sym, series):
+    """NSE symbol + series -> the symbol this pack uses (SME ones as Yahoo has them)."""
+    return sym.upper() + ("-SM.NS" if series in SME_SERIES else "")
+
+
+def rule_for(rules, sym):
+    """The market rule of an order symbol (RELIANCE, RELIANCE.NS, XYZ-SM.NS, ABC.BO) or None."""
+    stocks = (rules or {}).get("stocks") or {}
+    s = sym.upper()
+    return stocks.get(s) or (stocks.get(s[:-3]) if s.endswith(".NS") and "-SM" not in s else None)
+
+
+def build_rules(bands_csv, asm_json, gsm_json, bhav_csv, bhav_day, universe_text=""):
+    """NSE's sec_list.csv, ASM and GSM reports, the last NSE bhavcopy and trader/universe.txt -> rules."""
+    import csv
+    import io
+    stocks = {}
+
+    def get(k):
+        return stocks.setdefault(k, {})
+
+    for r in csv.DictReader(io.StringIO(bands_csv.lstrip("\ufeff"))):
+        r = {k.strip(): (v or "").strip() for k, v in r.items() if k}
+        band = r.get("Band", "")
+        st = get(nse_key(r["Symbol"], r.get("Series", "")))
+        st["series"] = r.get("Series", "")
+        st["band_pct"] = float(band) if band.replace(".", "", 1).isdigit() else None
+        if r.get("Series") in T2T_SERIES:
+            st["t2t"] = True
+        if "GSM" in r.get("Remarks", "").upper():
+            st["surveillance"] = r["Remarks"]
+    for part in ("longterm", "shortterm"):
+        for r in ((asm_json or {}).get(part) or {}).get("data") or []:
+            if r.get("symbol"):
+                get(r["symbol"].upper())["surveillance"] = r.get("survDesc") or r.get("survCode") or "ASM"
+    for r in gsm_json or []:
+        if r.get("symbol"):
+            get(r["symbol"].upper())["surveillance"] = r.get("survDesc") or r.get("survCode") or "GSM"
+    for r in csv.DictReader(io.StringIO(bhav_csv.lstrip("\ufeff"))):
+        if r.get("FinInstrmTp", "STK") == "STK" and r.get("TckrSymb") and _f(r.get("ClsPric")):
+            k = nse_key(r["TckrSymb"], r.get("SctySrs", ""))
+            if k in stocks:
+                stocks[k]["prev_close"] = float(r["ClsPric"])
+    for ln in universe_text.splitlines():  # BSE T2T groups and SME tags come from the scanner's universe
+        f = ln.strip().split("|")
+        if len(f) >= 3 and f[2].endswith("T2T"):
+            get(f[0].upper())["t2t"] = True
+    return {"prev_close_date": bhav_day, "stocks": stocks}
+
+
+def refresh_rules(out, universe="trader/universe.txt", today=None):
+    import io
+    import urllib.request
+    import zipfile
+
+    def fetch(url):
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read()
+
+    try:
+        bands = fetch(RULES_SOURCES["bands"]).decode("utf-8", "replace")
+        asm = json.loads(fetch(RULES_SOURCES["asm"]))
+        gsm = json.loads(fetch(RULES_SOURCES["gsm"]))
+    except Exception as e:
+        raise RiskError("could not download NSE's lists: %s" % e)
+    day = today or to_ist(parse_now(None)).date()
+    bhav, bhav_day = "", None
+    for _ in range(7):  # the newest bhavcopy NSE has posted: its closes are the circuits' reference
+        if trading_day(day)[0]:
+            try:
+                z = zipfile.ZipFile(io.BytesIO(fetch(RULES_SOURCES["bhav"] % day.strftime("%Y%m%d"))))
+                bhav, bhav_day = z.read(z.namelist()[0]).decode("utf-8", "replace"), day.isoformat()
+                break
+            except Exception:
+                pass
+        day -= datetime.timedelta(days=1)
+    if not bhav:
+        raise RiskError("could not find a recent NSE bhavcopy for the previous closes")
+    uni = ""
+    if os.path.exists(universe):
+        with open(universe, encoding="utf-8") as fh:
+            uni = fh.read()
+    rules = build_rules(bands, asm, gsm, bhav, bhav_day, uni)
+    d = os.path.dirname(out)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(rules, fh)
+    n = rules["stocks"]
+    print("Wrote %s: %d stocks, %d with a price band, %d on ASM/GSM, %d trade-for-trade; previous closes of %s."
+          % (out, len(n), sum(1 for v in n.values() if v.get("band_pct")),
+             sum(1 for v in n.values() if v.get("surveillance")), sum(1 for v in n.values() if v.get("t2t")), bhav_day))
+    if not uni:
+        print("No %s: run the scanner's universe first so BSE trade-for-trade stocks are known." % universe)
+
+
+def india_reasons(sym, ref, stop, rules, c, today):
+    """(reasons, warnings) for an entry from the NSE/BSE market rules."""
+    if not rules:
+        return [], ["no trader/market_rules.json: T2T, ASM/GSM and circuit limits were not checked "
+                    "(run check.py --refresh-rules)"]
+    warns = []
+    pdate = rules.get("prev_close_date")
+    if pdate and today:
+        d = datetime.date.fromisoformat(today) - datetime.timedelta(days=1)
+        while not trading_day(d)[0]:
+            d -= datetime.timedelta(days=1)
+        if pdate != d.isoformat():
+            warns.append("market rules use closes of %s, not %s: refresh them (check.py --refresh-rules)"
+                         % (pdate, d.isoformat()))
+    r = rule_for(rules, sym)
+    if not r:
+        return [], warns + ["%s is not in the market rules (BSE-only, or new): circuit and surveillance "
+                            "not checked" % sym]
+    reasons = []
+    if r.get("t2t"):
+        reasons.append("t2t: %s is trade-for-trade (%s): delivery only, no intraday square-off"
+                       % (sym, r.get("series") or "T2T group"))
+    if r.get("surveillance") and not c.get("allow_surveillance"):
+        reasons.append("surveillance: %s is on NSE's list (%s)" % (sym, r["surveillance"]))
+    band, prev = r.get("band_pct"), r.get("prev_close")
+    if band and prev:
+        upper, lower = prev * (1 + band / 100.0), prev * (1 - band / 100.0)
+        buf = float(c.get("circuit_buffer_pct") or 0) / 100.0
+        if ref is not None and ref >= upper * (1 - buf):
+            reasons.append("circuit: entry %s is within %s%% of the %s%% upper circuit %s (previous close %s)"
+                           % (_p(ref), _num(buf * 100), _num(band), _p(upper), _p(prev)))
+        if stop is not None and stop <= lower:
+            reasons.append("circuit: stop %s is at or under the %s%% lower circuit %s: a locked circuit "
+                           "has no buyers, so the stop may never fill" % (_p(stop), _num(band), _p(lower)))
+    elif not band:
+        warns.append("%s has no fixed price band (F&O stock: NSE's dynamic limits apply)" % sym)
+    return reasons, warns
+
+
+def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=None, price_times=None,
+          rules=None):
     """Pure function. Returns {"results": [...], "pass": n, "block": n, "warnings": [...]}.
 
     now          naive UTC (default: the real clock); its IST date is "today"
@@ -457,7 +616,7 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
             else:
                 warns.append("option order: options can lose 100%% of what you pay")
         elif sym and ("/" in sym or not TICKER.match(sym)):
-            reasons.append("asset: %s does not look like a US stock or ETF ticker; "
+            reasons.append("asset: %s does not look like an NSE or BSE stock symbol; "
                            "this pack trades stocks and ETFs only" % sym)
 
         # the reference price: what one share costs to get in
@@ -601,6 +760,9 @@ def check(orders, cfg, portfolio=None, prices=None, state=None, today=None, now=
                 later.append("trades: %d entries placed today plus %d passed earlier in this batch, your limit "
                              "is %d a day" % (len(entries_today), batch_entries, cap_t))
             later.extend(win_reasons)
+            ind_r, ind_w = india_reasons(sym, ref, stop, rules, c, today)
+            later.extend(ind_r)
+            warns.extend(ind_w)
             if c.get("pdt_guard") and pdt_n >= 3:
                 later.append("pdt: %d day trades in the last 5 business days (%s); a 4th trips the "
                              "pattern-day-trader rule your broker applies (\"pdt_guard\": true)"
@@ -755,8 +917,14 @@ def main(argv=None):
     ap.add_argument("--out", default="trader/state/risk.json", help="where the verdicts are recorded")
     ap.add_argument("--no-write", action="store_true", help="do not record the verdicts")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--rules", default="trader/market_rules.json", help="NSE bands, ASM/GSM, T2T")
+    ap.add_argument("--refresh-rules", action="store_true",
+                    help="download NSE's price bands, ASM/GSM lists and last closes to --rules, then stop")
     a = ap.parse_args(argv)
     try:
+        if a.refresh_rules:
+            refresh_rules(a.rules)
+            return 0
         now = parse_now(a.now)
         if a.today and not re.match(r"^\d{4}-\d{2}-\d{2}$", a.today):
             raise RiskError("--today wants a date like 2026-10-19")
@@ -769,7 +937,8 @@ def main(argv=None):
         pdoc = read_json(a.prices, "prices", required=False) or {}
         prices, times = load_prices(pdoc)
         state = read_json(a.state, "broker state", required=False)
-        res = check(orders, cfg, portfolio, prices, state, a.today, now, times)
+        rules = read_json(a.rules, "market rules", required=False)
+        res = check(orders, cfg, portfolio, prices, state, a.today, now, times, rules)
         if pdoc.get("as_of"):
             res["prices_as_of"] = pdoc["as_of"]
         if not a.no_write:
