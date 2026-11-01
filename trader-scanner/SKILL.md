@@ -30,14 +30,14 @@ the scanner does not change that. It only saves you from flipping through
 python3 "${CLAUDE_SKILL_DIR}/scan.py" universe                       # -> trader/universe.txt
 python3 "${CLAUDE_SKILL_DIR}/scan.py" daily                          # before the open -> trader/watchlist.json
 python3 "${CLAUDE_SKILL_DIR}/scan.py" daily --symbols TSLA,NVDA,AMD  # or --watchlist FILE, --limit 200
-python3 "${CLAUDE_SKILL_DIR}/scan.py" orb                            # after 9:50 AM ET -> trader/watchlist.json
-python3 "${CLAUDE_SKILL_DIR}/scan.py" orb --at 10:15                 # cut the clock at 10:15 AM ET
+python3 "${CLAUDE_SKILL_DIR}/scan.py" orb                            # after 9:50 AM IST -> trader/watchlist.json
+python3 "${CLAUDE_SKILL_DIR}/scan.py" orb --at 10:15                 # cut the clock at 10:15 AM IST
 python3 "${CLAUDE_SKILL_DIR}/scan.py" orb --watchlist trader/watchlist.json --json
 ```
 
 Flags: `--min-price 5` and `--min-volume` (daily 1,000,000, orb 0),
 `--or-minutes 15`, `--max-confirm 200` (orb stage 2),
-`--now "2026-10-19 10:15"` (New York time) to pin the clock, `--offline PATH`
+`--now "2026-10-19 10:15"` (India time (IST)) to pin the clock, `--offline PATH`
 to read saved Yahoo files, `--no-write`, `--show N`, `--json`. Exit code 0
 when the scan found something, 1 when it found nothing or could not run (the
 reason is one plain line).
@@ -81,7 +81,7 @@ symbols take 298 requests. On Oct 20 2026 that took 145 seconds with the
 polite pause (0.3 s). Liquidity comes from the spark meta: last price at
 least `--min-price` and last session's volume at least `--min-volume`. Run it
 before the open or after the close: during the session the volume is the
-day's so far, and today's daily bar is left out until 4:00 PM.
+day's so far, and today's daily bar is left out until 3:30 PM.
 
 The setups are computed from daily closes only (spark has no highs or lows),
 so they are close cousins of the reel's `refs/scan.py`, which used highs and
@@ -138,14 +138,14 @@ are in the calendar.
   or 5xx, one retry after a 5-second wait on a 429.
 - Partial results are said as partial: "Fetched 4,980 of 5,259 charts (279
   failed or had no data)". Never round a partial scan up to "the whole market".
-- NYSE holidays and early closes for 2026 and 2027 (nyse.com, read 2026-10-13).
+- NSE holidays and early closes for 2026 and 2027 (nyse.com, read 2026-10-13).
 
 ## Steps
 
 1. Once a week or so: `scan.py universe`.
 2. Before the open: `scan.py daily`. Tell the user the counts (fetched,
    liquid, scanned, hits) and the top few by setup.
-3. After 9:50 AM ET (10:15 is the classic): `scan.py orb`. Tell the user how
+3. After 9:50 AM IST (10:15 is the classic): `scan.py orb`. Tell the user how
    many usable charts broke their range and when, and that a later hit is
    closer to the price now.
 4. The user picks one chart. Hand it on: `/trader-news TICKER` (what is moving

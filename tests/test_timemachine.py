@@ -28,7 +28,7 @@ PLAN = {"created_by": "trader-exit", "symbol": "TSLA", "side": "buy", "date": "2
         "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
         "stop": 358.32, "stop_rule": "or_mid", "stop_label": "opening-range midpoint",
         "target": 370.04, "target_r": 1.0, "target_label": "1R (one times the risk)",
-        "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:55"}
+        "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:15"}
 
 # fingerprints of the reel's refs/sim-out.json (sim.py mid 1, seed 19): proves bit-for-bit equality
 SIM_BANDS = "b9b7c006a733c68b"
@@ -70,7 +70,7 @@ def keep_bars(result, keep):
 
 
 def et(ts):
-    return tm.to_eastern(tm.utc_of(ts))
+    return tm.to_ist(tm.utc_of(ts))
 
 
 def run(argv):
@@ -222,8 +222,8 @@ class Bars(unittest.TestCase):
         self.assertEqual([(b["date"], b["start"], b["slot"]) for b in bars],
                          [("2026-10-30", "09:30", 0), ("2026-11-02", "09:30", 0), ("2026-11-02", "15:00", 66)])
         self.assertEqual(dropped["outside_hours"], 1)
-        self.assertEqual(tm.eastern_offset(tm.utc_of(1793367000)), -4)
-        self.assertEqual(tm.eastern_offset(tm.utc_of(1793629800)), -5)
+        self.assertEqual(tm.ist_offset(tm.utc_of(1793367000)), -4)
+        self.assertEqual(tm.ist_offset(tm.utc_of(1793629800)), -5)
 
     def test_a_half_day_is_left_out(self):
         def cut(res):  # 2026-09-04 ends at 1:00 PM, like a real early close: 42 bars
@@ -288,7 +288,7 @@ class Bars(unittest.TestCase):
             for b in bars[:42] if day.isoformat() == "2026-11-27" else bars:
                 local = tm.datetime.datetime.combine(day, tm.datetime.time(9, 30)) + tm.datetime.timedelta(
                     minutes=5 * b["slot"])
-                stamps.append(int((tm.eastern_to_utc(local) - tm.EPOCH).total_seconds()))
+                stamps.append(int((tm.ist_to_utc(local) - tm.EPOCH).total_seconds()))
                 for k, f in (("open", "o"), ("high", "h"), ("low", "l"), ("close", "c"), ("volume", "v")):
                     cols[k].append(b[f])
         text = json.dumps({"chart": {"result": [{"meta": {"symbol": "TSLA"}, "timestamp": stamps,

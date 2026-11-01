@@ -44,17 +44,17 @@ def plan_rules():
 
 class Calendar(unittest.TestCase):
     def test_holidays_match_the_published_list(self):
-        self.assertEqual(sorted(alerts.NYSE_HOLIDAYS), NYSE_2026 + NYSE_2027)
-        self.assertEqual(sorted(alerts.NYSE_EARLY_CLOSE), EARLY)
-        for d in list(alerts.NYSE_HOLIDAYS) + list(alerts.NYSE_EARLY_CLOSE):
+        self.assertEqual(sorted(alerts.NSE_HOLIDAYS), NYSE_2026 + NYSE_2027)
+        self.assertEqual(sorted(alerts.NSE_EARLY_CLOSE), EARLY)
+        for d in list(alerts.NSE_HOLIDAYS) + list(alerts.NSE_EARLY_CLOSE):
             self.assertLess(datetime.date.fromisoformat(d).weekday(), 5, d)
 
     def test_daylight_saving_switches(self):
-        self.assertEqual(alerts.eastern_offset(DT(2026, 3, 8, 6, 59)), -5)
-        self.assertEqual(alerts.eastern_offset(DT(2026, 3, 8, 7, 0)), -4)
-        self.assertEqual(alerts.eastern_offset(DT(2026, 11, 1, 5, 59)), -4)
-        self.assertEqual(alerts.eastern_offset(DT(2026, 11, 1, 6, 0)), -5)
-        self.assertEqual(alerts.eastern_offset(DT(2027, 3, 14, 7, 0)), -4)
+        self.assertEqual(alerts.ist_offset(DT(2026, 3, 8, 6, 59)), -5)
+        self.assertEqual(alerts.ist_offset(DT(2026, 3, 8, 7, 0)), -4)
+        self.assertEqual(alerts.ist_offset(DT(2026, 11, 1, 5, 59)), -4)
+        self.assertEqual(alerts.ist_offset(DT(2026, 11, 1, 6, 0)), -5)
+        self.assertEqual(alerts.ist_offset(DT(2027, 3, 14, 7, 0)), -4)
 
     def test_parse_now(self):
         self.assertEqual(ny("2026-10-13T09:30"), DT(2026, 10, 13, 13, 30))

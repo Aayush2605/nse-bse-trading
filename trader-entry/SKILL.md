@@ -37,7 +37,7 @@ python3 "${CLAUDE_SKILL_DIR}/entry.py" watchlist                   # every hit i
 
 Other flags: `--or-minutes N` (default 15), `--json`, `--offline FILE` (a
 saved Yahoo chart JSON, `.json` or `.json.gz`, or a folder of
-`<TICKER>.json`), `--now "2026-10-19 10:15"` (New York time) to replay a day.
+`<TICKER>.json`), `--now "2026-10-19 10:15"` (India time (IST)) to replay a day.
 `watch` with `--now` or `--offline` runs on a simulated clock and replays the
 day bar by bar without waiting.
 
@@ -46,7 +46,7 @@ day bar by bar without waiting.
 | file | what |
 | --- | --- |
 | `trader/watchlist.json` | the scanner's hits (`hits[].symbol`), for `watchlist` |
-| `trader/config.json` | `no_entries_before` (09:45) and `no_entries_after` (15:30), New York time. Optional |
+| `trader/config.json` | `no_entries_before` (09:45) and `no_entries_after` (15:30), India time (IST). Optional |
 | Yahoo chart API | today's bars, `range=1d&interval=5m` (or `1m`): free, unofficial, can lag |
 | `trader/entry.json` | with `check --write`, or when `watch` triggers: symbol, setup, status, time, bar, price, level, opening range |
 
@@ -71,7 +71,7 @@ day bar by bar without waiting.
   p.m. early close the cutoff moves up with the close, to 12:30.
 - **What it says.** Waiting (and how far the last close is from the level),
   triggered, expired, or no data. Before 9:30: not open yet. Before 9:45: the
-  range is still forming. Weekends and NYSE holidays: the market is closed.
+  range is still forming. Weekends and NSE holidays: the market is closed.
 
 ## Steps
 
@@ -104,7 +104,7 @@ The 10:10 bar is still forming ($364.18 so far, closes 10:15 AM); it does not co
 At 10:15 the bar has closed:
 
 ```
-TSLA  Mon 2026-10-19 10:15 ET  opening-range breakout (15-minute range) on 5-minute bars (Yahoo, free, can lag)
+TSLA  Mon 2026-10-19 10:15 IST  opening-range breakout (15-minute range) on 5-minute bars (Yahoo, free, can lag)
 Opening range 9:30-9:45: high $362.18, low $354.47 (3 of 3 bars).
 TRIGGERED 10:15 AM at $364.18: the 10:10 bar (bar 8) closed above the range high $362.18 (+0.55%).
 This is the moment to get in, if you take the trade. Nothing was placed.
