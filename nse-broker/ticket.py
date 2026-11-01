@@ -662,7 +662,7 @@ def yahoo_bars(sym, day, offline=None):
         import urllib.parse
         import urllib.request
         s = sym.upper() if "." in sym or sym.startswith("^") else sym.upper() + ".NS"
-        url = "https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1m" % urllib.parse.quote(s)
+        url = "https://query1.finance.yahoo.com/v8/finance/chart/%s?range=5d&interval=1m" % urllib.parse.quote(s)
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         try:
             with urllib.request.urlopen(req, timeout=20) as r:
@@ -725,10 +725,11 @@ def cmd_paper(a):
         raise TicketError("order %d has no yes recorded today: ticket.py approve first" % a.index)
     price = _f(a.price)
     if price is None:
-        bars = yahoo_bars(order["symbol"], today, a.offline)
+        until = to_ist(now)
+        bars = [b for b in yahoo_bars(order["symbol"], today, a.offline) if b[0] + datetime.timedelta(minutes=1) <= until]
         if not bars:
-            raise TicketError("no bars for %s today: pass --price" % order["symbol"])
-        price = bars[-1][4]
+            raise TicketError("no closed 1-minute bar for %s yet today: pass --price" % order["symbol"])
+        price = bars[-1][4]  # the last close by now (a pinned --now replays a past session)
     qty = int(round(_f(order.get("qty")) or 0))
     side = str(order.get("side")).lower()
     apply_fill(a.portfolio, cfg, order["symbol"], side, qty, price, today)

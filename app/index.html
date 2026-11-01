@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NSE BSE Trader</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f7e4d5; --paper-2:#f1d6c2; --card:#fbf0e6; --ink:#1c1915; --ink-2:#4a423a; --rule:#c9ab95;
+  --gain:#0f6b3d; --loss:#b4321e; --mark:#1c1915; --gold:#9a6a12;
+  --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 var(--sans)}
+body{background:
+  radial-gradient(1200px 600px at 85% -10%, #fbeee3 0%, transparent 60%),
+  repeating-linear-gradient(0deg, transparent 0 31px, rgba(140,90,60,.06) 31px 32px), var(--paper)}
+button,input,select,textarea{font:inherit;color:inherit}
+.mast{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:22px 32px 14px;border-bottom:3px double var(--ink)}
+.mast h1{font:900 clamp(28px,4vw,46px)/1 var(--serif);letter-spacing:-.02em;margin:0}
+.mast h1 em{font-style:italic;font-weight:500;color:var(--gold)}
+.dateline{font:500 12px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--ink-2);margin-top:6px}
+.stamp{font:700 13px/1 var(--mono);letter-spacing:.16em;color:var(--loss);border:2px solid var(--loss);padding:8px 10px;transform:rotate(-3deg);white-space:nowrap}
+.bar{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:10px 32px;border-bottom:1px solid var(--rule);font-size:14px}
+.bar label{display:flex;gap:8px;align-items:center}
+.bar input[type=text],.bar input[type=number]{width:150px}
+.wrap{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 150px)}
+nav{border-right:1px solid var(--rule);padding:18px 0}
+nav button{display:flex;gap:14px;align-items:baseline;width:100%;text-align:left;background:none;border:0;padding:12px 24px;cursor:pointer;border-left:4px solid transparent}
+nav button .n{font:900 26px/1 var(--serif);color:var(--rule);min-width:24px}
+nav button .t{font:600 15px/1.2 var(--sans)}
+nav button .s{display:block;font:400 12px/1.3 var(--sans);color:var(--ink-2)}
+nav button:hover{background:var(--paper-2)}
+nav button[aria-current=step]{border-left-color:var(--ink);background:var(--card)}
+nav button[aria-current=step] .n{color:var(--ink)}
+nav button.done .n{color:var(--gain)}
+main{padding:28px 36px 60px;max-width:1080px}
+.kicker{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+h2{font:700 clamp(26px,3vw,38px)/1.1 var(--serif);margin:8px 0 6px;letter-spacing:-.01em}
+.lede{color:var(--ink-2);max-width:62ch;margin:0 0 20px}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin:0 0 20px}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}
+input[type=text],input[type=number],select,textarea{background:var(--card);border:1px solid var(--rule);border-radius:2px;padding:9px 11px}
+textarea{width:min(640px,100%);height:70px;font:13px/1.4 var(--mono);resize:vertical}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.go{background:var(--ink);color:var(--paper);border:0;padding:12px 22px;font-weight:600;cursor:pointer;border-radius:2px;letter-spacing:.02em}
+.go:hover{background:#000}
+.go:disabled{opacity:.45;cursor:wait}
+.go.yes{background:var(--gain)}
+.ghost{background:none;border:1px solid var(--ink);padding:11px 18px;cursor:pointer;border-radius:2px}
+.status{font:500 13px var(--mono);color:var(--ink-2);min-height:20px}
+.status.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:8px;border:2px solid var(--ink);border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:6px 0 20px}
+.fig{background:var(--card);border:1px solid var(--rule);padding:14px 16px;animation:rise .35s ease both}
+.fig .l{font:600 11px/1.2 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--ink-2)}
+.fig .v{font:600 26px/1.15 var(--mono);margin-top:6px;font-variant-numeric:tabular-nums}
+.fig .h{font-size:13px;color:var(--ink-2);margin-top:4px}
+.fig:nth-child(2){animation-delay:.05s}.fig:nth-child(3){animation-delay:.1s}.fig:nth-child(4){animation-delay:.15s}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+.gain{color:var(--gain)} .loss{color:var(--loss)}
+.headline{font:700 22px/1.25 var(--serif);margin:4px 0 14px;max-width:60ch}
+.verdict{border-left:4px solid var(--ink);padding:10px 14px;background:var(--card);margin:0 0 18px;font:600 16px/1.4 var(--serif)}
+.verdict.block{border-color:var(--loss);color:var(--loss)} .verdict.pass{border-color:var(--gain);color:var(--gain)}
+.odds{display:flex;height:34px;border:1px solid var(--ink);margin:8px 0 6px;font:600 12px/34px var(--mono);color:#fff;overflow:hidden}
+.odds div{text-align:center;white-space:nowrap;overflow:hidden}
+.legend{font-size:13px;color:var(--ink-2)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--card);border:1px solid var(--rule)}
+th{text-align:left;font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-2);padding:10px;border-bottom:2px solid var(--ink)}
+td{padding:10px;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums}
+td.num{font-family:var(--mono)}
+tbody tr{cursor:pointer} tbody tr:hover{background:var(--paper-2)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.col h3{font:700 18px var(--serif);margin:0 0 8px;border-bottom:1px solid var(--ink);padding-bottom:6px}
+pre{white-space:pre-wrap;word-break:break-word;font:12.5px/1.55 var(--mono);background:var(--card);border:1px solid var(--rule);padding:12px 14px;margin:0;max-height:440px;overflow:auto}
+details{margin-top:16px} summary{cursor:pointer;font:600 13px var(--mono);color:var(--ink-2)}
+.err{border:1px solid var(--loss);background:#fbe5dd;color:var(--loss);padding:12px 14px;margin:0 0 16px}
+.confirm{display:flex;gap:10px;align-items:flex-start;max-width:62ch;margin:14px 0}
+.note{font-size:13px;color:var(--ink-2);max-width:70ch}
+.pick{font:600 13px var(--mono);background:var(--ink);color:var(--paper);padding:3px 8px;margin-left:6px}
+footer{border-top:3px double var(--ink);padding:14px 32px;font-size:12px;color:var(--ink-2)}
+@media (max-width:820px){.wrap{grid-template-columns:1fr} nav{display:flex;overflow-x:auto;border-right:0;border-bottom:1px solid var(--rule);padding:0}
+  nav button{min-width:150px;border-left:0;border-bottom:4px solid transparent} nav button[aria-current=step]{border-bottom-color:var(--ink)}
+  main,.mast,.bar{padding-left:16px;padding-right:16px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<header class="mast">
+  <div>
+    <h1>NSE BSE <em>Trader</em></h1>
+    <div class="dateline" id="dateline">Day trading, one step at a time</div>
+  </div>
+  <div class="stamp" title="Nothing is ever sent to a broker from this app">PAPER TRADING</div>
+</header>
+
+<div class="bar">
+  <label><input type="checkbox" id="practice"> Practice on a past day</label>
+  <label id="practiceWrap" hidden>at <input type="text" id="now" placeholder="2026-10-30 09:40" aria-label="Practice date and time"></label>
+  <label>Budget ₹ <input type="number" id="budget" min="1000" step="1000"></label>
+  <label>Max loss a trade ₹ <input type="number" id="maxloss" min="10" step="50"></label>
+  <button class="ghost" id="saveSettings">Save limits</button>
+  <span class="status" id="settingsMsg" aria-live="polite"></span>
+</div>
+
+<div class="wrap">
+  <nav aria-label="Steps" id="nav"></nav>
+  <main id="main" aria-live="polite"></main>
+</div>
+
+<footer>Education and tooling, not financial advice. Most intraday traders lose money. Prices are free, unofficial data and can lag.
+Everything stays on this computer.</footer>
+
+<script>
+const STEPS = [
+  {id:"scan", t:"Find stocks", s:"Which charts are breaking out"},
+  {id:"research", t:"Research", s:"News, results, insiders"},
+  {id:"plan", t:"Plan the trade", s:"Entry, stop, target, odds"},
+  {id:"size", t:"How much to buy", s:"Shares and charges"},
+  {id:"check", t:"Safety check", s:"Your limits and NSE rules"},
+  {id:"trade", t:"Paper trade", s:"Place it and track it"},
+];
+const $ = s => document.querySelector(s);
+const store = {get:(k,d)=>{try{return localStorage.getItem(k) ?? d}catch(e){return d}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+let files = {}, current = store.get("step","scan"), symbol = store.get("symbol",""), lastRuns = {}, timer = null;
+
+const rs = v => v==null||isNaN(v) ? "-" : (v<0?"\u2212":"") + "₹" + Math.abs(Number(v)).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const SETUPS = {orb:"Opening-range breakout", breakout_20d:"20-day high breakout", bull_flag:"Bull flag",
+  reclaim_ma20:"Back above the 20-day average", oversold:"Oversold (RSI under 30)", oversold_bounce:"Oversold bounce"};
+const pct = v => v==null ? "-" : (v*100).toFixed(1) + "%";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const bare = s => String(s||"").replace(/\.NS$/,"");
+const now = () => $("#practice").checked ? $("#now").value.trim() : "";
+
+function nav(){
+  $("#nav").innerHTML = STEPS.map((s,i)=>`<button data-step="${s.id}" ${s.id===current?'aria-current="step"':''}>
+    <span class="n">${i+1}</span><span><span class="t">${s.t}</span><span class="s">${s.s}</span></span></button>`).join("");
+  $("#nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.step));
+}
+function go(step){ current = step; store.set("step",step); nav(); render(); }
+function pickSymbol(s){ symbol = bare(s); store.set("symbol",symbol); }
+
+async function api(step, body={}){
+  const st = $("#status"); if(st){st.className="status busy"; st.textContent="Working. Fetching live data can take a minute...";}
+  document.querySelectorAll(".go").forEach(b=>b.disabled=true);
+  try{
+    const r = await fetch("/api/"+step,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body, now:now()})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||"failed");
+    if(d.files) files = d.files;
+    if(d.runs) lastRuns[step] = d.runs;
+    return d;
+  }catch(e){ lastRuns[step] = [{tool:"app", code:1, text:e.message}]; }
+  finally{ document.querySelectorAll(".go").forEach(b=>b.disabled=false); render(); }
+}
+
+function problems(step){
+  // exit code 1 also means "nothing found" or "blocked"; a real failure prints "tool.py: why" or a traceback
+  const bad = (lastRuns[step]||[]).filter(r=>r.code!==0 && (r.tool==="app" || r.code<0 || /^[\w-]+\.py: |Traceback/m.test(r.text||"")));
+  return bad.map(r=>`<div class="err"><b>This step stopped${r.tool!=="app"?" at "+esc(r.tool):""}.</b><br>${esc(lastLine(r.text))}</div>`).join("");
+}
+const lastLine = t => (t||"").trim().split("\n").filter(l=>!l.startsWith("Traceback")).slice(-2).join(" ");
+function details(step){
+  const runs = lastRuns[step]; if(!runs) return "";
+  return `<details><summary>Full details from the tools</summary>${runs.map(r=>`<pre>${esc(r.text||"(no output)")}</pre>`).join("<br>")}</details>`;
+}
+const fig = (l,v,h="",cls="") => `<div class="fig"><div class="l">${l}</div><div class="v ${cls}">${v}</div>${h?`<div class="h">${h}</div>`:""}</div>`;
+const head = (i,title,lede) => `<div class="kicker">Step ${i} of 6</div><h2>${title}</h2><p class="lede">${lede}</p>`;
+const symField = () => `<div class="field">Stock<input type="text" id="sym" value="${esc(symbol)}" placeholder="ICICIBANK" autocapitalize="characters"></div>`;
+const readSym = () => { const v = ($("#sym")?.value||"").trim().toUpperCase(); if(v) pickSymbol(v); return symbol; };
+
+const VIEWS = {
+  scan(){
+    const w = files.watchlist, hits = (w && w.hits) || [];
+    const p = now().match(/ (\d{2}):(\d{2})$/), d = new Date();
+    const mins = p ? (+p[1])*60 + (+p[2]) : d.getHours()*60 + d.getMinutes();
+    const mode = store.get("mode", mins >= 9*60+35 && mins <= 15*60+30 ? "orb" : "daily");
+    return head(1,"Find stocks that are moving","An opening-range breakout is a stock that closes a 5-minute bar above its high of the first 15 minutes (9:15 to 9:30). Before the open, look for daily setups instead.") +
+    `<div class="controls">
+      <div class="field">Look for<select id="mode"><option value="orb" ${mode==="orb"?"selected":""}>Opening-range breakouts (after 9:35 AM)</option><option value="daily" ${mode==="daily"?"selected":""}>Daily setups (before the open)</option></select></div>
+      <label class="field" style="flex-direction:row;align-items:center"><input type="checkbox" id="all"> All NSE and BSE stocks (about 5,000, takes 2 to 3 minutes)</label>
+    </div>
+    <div class="field" style="margin-bottom:14px">Or these stocks (Nifty 50 by default)<textarea id="syms" placeholder="Leave empty for the Nifty 50, or type symbols like RELIANCE, TCS, SBIN"></textarea></div>
+    <div class="controls"><button class="go" id="run">Scan now</button><span class="status" id="status"></span></div>` + problems("scan") +
+    (w ? `<p class="headline">${hits.length ? hits.length+" "+(hits.length===1?"stock":"stocks")+" found" : "Nothing matched this time."} <span class="note">${esc(w.as_of||"")} &middot; ${w.scanned||0} charts scanned</span></p>` : "") +
+    (hits.length ? `<table><thead><tr><th>Stock</th><th>Setup</th><th>Price</th><th>Detail</th></tr></thead><tbody>${hits.map(h=>`<tr data-s="${esc(h.symbol)}" tabindex="0">
+      <td><b>${esc(h.symbol)}</b></td><td>${esc((h.setups||[]).map(x=>SETUPS[x]||x).join(", "))}${h.at?" at "+esc(h.at):""}</td>
+      <td class="num">${rs(h.price)}</td><td class="num">${h.pct_over!=null?"+"+h.pct_over+"% over range":h.rsi!=null?"RSI "+Number(h.rsi).toFixed(1):""}</td></tr>`).join("")}</tbody></table>
+      <p class="note">Click a stock to research it. A scan is a list of charts, not a list of stocks to buy.</p>` : "") + details("scan");
+  },
+  research(){
+    const runs = lastRuns.research || [];
+    return head(2,"Research "+(symbol||"a stock"),"Before a chart becomes a trade: is there news, how were the last results, are insiders buying or selling? A results day or a big order can make the price jump past any stop.") +
+    `<div class="controls">${symField()}<button class="go" id="run">Research</button><span class="status" id="status"></span></div>` + problems("research") +
+    (runs.length ? `<div class="cols">${["News and NSE filings","Quarterly results","Insider trades"].map((t,i)=>`<div class="col"><h3>${t}</h3><pre>${esc(runs[i]?.text||"")}</pre></div>`).join("")}</div>` : "") +
+    `<div class="controls" style="margin-top:20px"><button class="ghost" onclick="go('plan')">Next: plan the trade</button></div>`;
+  },
+  plan(){
+    const e = files.entry, p = files.plan, tm = files.timemachine, fresh = e && bare(e.symbol)===symbol;
+    let body = "";
+    if(fresh){
+      body += `<p class="headline">${e.status==="triggered" ? "Breakout confirmed at "+esc(e.time)+" for "+rs(e.price)+"." : "No entry yet: "+esc(e.reason||e.status)}</p>`;
+      if(e.status==="triggered" && p && bare(p.symbol)===symbol){
+        body += `<div class="grid">${fig("Buy at",rs(p.entry),esc(p.entry_time))}${fig("Stop (get out if it falls to)",rs(p.stop),"Risk "+rs(p.risk_per_share)+" a share","loss")}${fig("Target",rs(p.target),p.target_r+"x the risk","gain")}${fig("Out by",esc(p.flat_by)+" IST","win or lose, no overnight")}</div>`;
+        if(tm && tm.mc && tm.plan && bare(tm.plan.symbol)===symbol){
+          const m = tm.mc, h = tm.history || {};
+          body += `<div class="kicker">The time machine: ${m.replays.toLocaleString("en-IN")} replays from the last ${m.pool_sessions} sessions</div>
+          <div class="odds" role="img" aria-label="Target first ${pct(m.p_target)}, stop first ${pct(m.p_stop)}, neither ${pct(m.p_neither)}">
+            <div style="width:${m.p_target*100}%;background:var(--gain)">${m.p_target>.12?"Target "+pct(m.p_target):""}</div>
+            <div style="width:${m.p_stop*100}%;background:var(--loss)">${m.p_stop>.12?"Stop "+pct(m.p_stop):""}</div>
+            <div style="width:${m.p_neither*100}%;background:var(--ink-2)">${m.p_neither>.12?"Neither "+pct(m.p_neither):""}</div></div>
+          <p class="legend">On the ${h.sessions||0} real past days, this setup fired ${h.triggered||0} times: ${h.target||0} reached the target, ${h.stop||0} hit the stop, ${h.close||0} neither.</p>
+          <div class="verdict">${esc(tm.verdict)}</div>`;
+        }
+      }
+    }
+    return head(3,"Plan the trade"+(symbol?" in "+symbol:""),"Decide where you get out BEFORE you get in. The stop is the opening range's middle; the target is a multiple of what you risk. Then the time machine replays the rest of the day 10,000 times to show the honest odds.") +
+    `<div class="controls">${symField()}<div class="field">Target<select id="target"><option value="1">1x the risk</option><option value="1.5">1.5x the risk</option><option value="2">2x the risk</option></select></div>
+     <button class="go" id="run">Check and plan</button><span class="status" id="status"></span></div>` + problems("plan") + body + details("plan") +
+    (fresh && e.status==="triggered" ? `<div class="controls"><button class="ghost" onclick="go('size')">Next: how much to buy</button></div>` : "");
+  },
+  size(){
+    const o = files.orders && files.orders.orders && files.orders.orders[0], c = files.config || {};
+    let body = "";
+    if(o && o.plan && bare(o.symbol)===symbol){
+      const pl = o.plan, cost = Number(o.qty)*pl.entry;
+      body = `<p class="headline">Buy ${esc(o.qty)} shares of ${esc(bare(o.symbol))} for about ${rs(cost)}.</p>
+      <div class="grid">${fig("If the stop hits",rs(-pl.net_loss),"after charges","loss")}${fig("If the target hits","+"+rs(pl.net_profit),"after charges","gain")}${fig("Charges (round trip)",rs(pl.charges_at_stop),"brokerage, STT, exchange, SEBI, stamp, GST")}${fig("Your max loss a trade",rs(c.max_loss_per_trade_usd||500),"set at the top")}</div>
+      <p class="note">${esc(o.why)}</p>`;
+    } else if(lastRuns.size) body = `<div class="verdict block">${esc(lastLine(lastRuns.size[0].text))}</div>`;
+    return head(4,"How much to buy","The number of shares is chosen so that if the stop hits, you lose no more than your max loss, charges included. If even one share risks too much, there is no trade.") +
+    `<div class="controls"><div class="field">Budget ₹<input type="number" id="sbudget" value="${esc(c.budget||50000)}"></div><button class="go" id="run">Work it out</button><span class="status" id="status"></span></div>` + body + details("size") +
+    (body && o ? `<div class="controls"><button class="ghost" onclick="go('check')">Next: safety check</button></div>` : "");
+  },
+  check(){
+    const r = files.risk, res = r && r.results && r.results[0], today = new Date().toISOString().slice(0,10);
+    let body = "";
+    if(res && lastRuns.check){
+      const ok = res.verdict==="PASS";
+      body = `<div class="verdict ${ok?"pass":"block"}">${ok?"PASS: this trade fits all your rules.":"BLOCKED: this trade breaks a rule."}</div>` +
+      (res.reasons||[]).map(x=>`<p class="loss">&#10005; ${esc(x)}</p>`).join("") +
+      ([...(res.warnings||[]), ...(r.warnings||[])]).map(x=>`<p class="note">Note: ${esc(x)}</p>`).join("");
+    }
+    return head(5,"Safety check","Every trade is checked against your limits (max loss, daily loss, trades a day, the entry window) and NSE's rules: circuit limits, the ASM/GSM watch lists and trade-for-trade stocks.") +
+    `<div class="controls"><label class="field" style="flex-direction:row;align-items:center"><input type="checkbox" id="refresh" ${store.get("rulesDay","")!==today?"checked":""}> Download today's NSE lists first (once a day)</label>
+     <button class="go" id="run">Check it</button><span class="status" id="status"></span></div>` + problems("check") + body + details("check") +
+    (res && res.verdict==="PASS" && lastRuns.check ? `<div class="controls"><button class="ghost" onclick="go('trade')">Next: paper trade</button></div>` : "");
+  },
+  trade(){
+    const b = files.broker || {}, open = (b.paper_open||[]), placed = (b.orders||[]).filter(x=>x.paper && x.status==="placed").slice(-5).reverse();
+    const ticket = lastRuns.ticket && lastRuns.ticket[0];
+    const ready = ticket && /READY/.test(ticket.text) && !/DONE|NOT READY/.test(ticket.text);
+    return head(6,"Paper trade","A pretend trade with real prices. Nothing is sent to any broker. After you say yes, it fills at the latest price and closes itself at the stop, the target or 3:15 PM.") +
+    `<div class="controls"><button class="go" id="run">Show the order</button><span class="status" id="status"></span></div>` + problems("ticket") + problems("place") +
+    (ticket ? `<pre>${esc(ticket.text)}</pre>` : "") +
+    (ready ? `<label class="confirm"><input type="checkbox" id="ok"> <span>I have read this order. I understand it is a paper trade with pretend money, and that real trading can lose money.</span></label>
+      <button class="go yes" id="place">Yes, place this paper trade</button>` : "") +
+    `<h3 style="font:700 20px var(--serif);margin:28px 0 8px">Open paper trades</h3>` +
+    (open.length ? open.map(t=>`<div class="grid">${fig(esc(bare(t.symbol)),t.qty+" shares","bought at "+rs(t.entry))}${fig("Stop",rs(t.stop),"","loss")}${fig("Target",rs(t.target),"","gain")}${fig("Out by",esc(t.flat_by))}</div>`).join("")
+      : `<p class="note">None open.</p>`) +
+    `<div class="controls"><button class="go" id="track">How is it doing?</button><label><input type="checkbox" id="auto" ${timer?"checked":""}> Check every minute</label></div>` + problems("track") +
+    (lastRuns.track ? `<pre>${esc(lastRuns.track.map(r=>r.text).join("\n"))}</pre>` : "") +
+    (placed.length ? `<details><summary>Recent paper orders</summary><pre>${esc(placed.map(x=>x.at+"  "+x.plain).join("\n"))}</pre></details>` : "");
+  },
+};
+
+const ACTIONS = {
+  scan(){ store.set("mode",$("#mode").value); return api("scan",{mode:$("#mode").value, all:$("#all").checked, symbols:$("#syms").value.trim()}); },
+  research(){ if(!readSym()) return; return api("research",{symbol}); },
+  plan(){ if(!readSym()) return; return api("plan",{symbol, target:$("#target").value}); },
+  size(){ return api("size",{budget:$("#sbudget").value}); },
+  check(){ if($("#refresh").checked) store.set("rulesDay",new Date().toISOString().slice(0,10)); return api("check",{refresh:$("#refresh").checked}); },
+  trade(){ return api("ticket"); },
+};
+
+function render(){
+  $("#main").innerHTML = VIEWS[current]();
+  $("#run") && ($("#run").onclick = ACTIONS[current]);
+  document.querySelectorAll("tr[data-s]").forEach(tr=>{ const f=()=>{pickSymbol(tr.dataset.s); go("research")}; tr.onclick=f; tr.onkeydown=e=>{if(e.key==="Enter")f()}; });
+  if($("#place")) $("#place").onclick = async ()=>{ if(!$("#ok").checked){ alert("Tick the box to confirm you have read the order."); return; }
+    await api("place",{confirm:"yes"}); await api("ticket"); };
+  if($("#track")) $("#track").onclick = ()=>api("track");
+  if($("#auto")) $("#auto").onchange = e=>{ clearInterval(timer); timer = e.target.checked ? setInterval(()=>api("track"),60000) : null; };
+  if($("#target") && files.plan && files.plan.target_r) $("#target").value = String(files.plan.target_r);
+}
+
+async function boot(){
+  try{ const d = await (await fetch("/api/state")).json(); files = d.files||{};
+    $("#dateline").textContent = "Your files: " + d.folder; }catch(e){}
+  const c = files.config||{}; $("#budget").value = c.budget||50000; $("#maxloss").value = c.max_loss_per_trade_usd||500;
+  $("#practice").checked = store.get("practice","")==="1"; $("#now").value = store.get("now","");
+  $("#practiceWrap").hidden = !$("#practice").checked;
+  $("#practice").onchange = ()=>{ store.set("practice",$("#practice").checked?"1":""); $("#practiceWrap").hidden=!$("#practice").checked; render(); };
+  $("#now").onchange = ()=>store.set("now",$("#now").value.trim());
+  $("#saveSettings").onclick = async ()=>{
+    const r = await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({budget:$("#budget").value,max_loss_per_trade_usd:$("#maxloss").value})});
+    const d = await r.json(); $("#settingsMsg").textContent = r.ok ? "Saved." : d.error; if(r.ok) files = d.files;
+    setTimeout(()=>$("#settingsMsg").textContent="",3000);
+  };
+  nav(); render();
+}
+boot();
+</script>
+</body>
+</html>

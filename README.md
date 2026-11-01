@@ -36,6 +36,16 @@ cp -r nse-bse-trading/nse-* ~/.claude/skills/
 
 The tools need Python 3.8 or newer. Nothing to pip install.
 
+## The app: the same skills, behind buttons
+
+No commands, no Claude needed. A small web page that runs on your own computer and walks you through six steps: find stocks, research, plan, how much to buy, safety check, paper trade.
+
+1. Install Python 3.8 or newer from [python.org](https://www.python.org/downloads/) (on Windows, tick "Add python.exe to PATH").
+2. Download this repo (Code, Download ZIP) and unzip it.
+3. Double-click `app/start-windows.bat` (Windows) or `app/start-mac-linux.command` (Mac). Your browser opens at `http://127.0.0.1:8765`.
+
+Tick "Practice on a past day" to try it any time, even on a weekend, with a real past session (Yahoo keeps 1-minute bars for the last 7 days). Your files live in `nse-trader` in your home folder. The app only listens on your own computer, only runs this pack's scripts with checked inputs, and only paper trades: it cannot send an order to a broker.
+
 ## The eleven
 
 | command | job | what it does |
