@@ -52,14 +52,22 @@ class Symbols(unittest.TestCase):
         for t in ("RELIANCE", "M&M", "BAJAJ-AUTO", "20MICRONS", "ICICIBANK.NS", "TCS.BO"):
             self.assertTrue(risk.TICKER.match(t), t)
 
-    def test_universe_keeps_eq_only(self):
-        with open(os.path.join(IDIR, "EQUITY_L.csv"), encoding="utf-8") as fh:
-            kept, counts = scan.build_universe(fh.read())
-        syms = [s for s, _ in kept]
-        self.assertIn("M&M", syms)
-        self.assertIn("RELIANCE", syms)
-        self.assertNotIn("3IINFOLTD", syms)                                 # BE series
-        self.assertEqual(counts["keep"], 7)
+    def test_universe_is_every_nse_and_bse_stock_once(self):
+        texts = []
+        for f in ("EQUITY_L.csv", "SME_EQUITY_L.csv", "bse.csv"):
+            with open(os.path.join(IDIR, f), encoding="utf-8") as fh:
+                texts.append(fh.read())
+        kept, counts = scan.build_universe(*texts)
+        tag = {s: t for s, _, t in kept}
+        self.assertEqual(tag["RELIANCE"], "NSE EQ")                         # on both: kept once, NSE symbol
+        self.assertNotIn("RELIANCE.BO", tag)
+        self.assertEqual(tag["3IINFOLTD"], "NSE BE T2T")                    # listed, but delivery only
+        self.assertEqual(tag["RAVITA-SM.NS"], "NSE ST T2T")                 # NSE SME, Yahoo's form
+        self.assertEqual(tag["ABB.BO"], "BSE A")                            # BSE-only in this cut
+        self.assertEqual(tag["BHAGGAS.BO"], "BSE XT T2T")
+        self.assertNotIn("LIQUIDETF.BO", tag)                               # funds are not stocks
+        self.assertNotIn("NIF100BEES.BO", tag)
+        self.assertEqual(counts["keep"], 15)
 
 
 class RealSession(unittest.TestCase):

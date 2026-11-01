@@ -3,7 +3,7 @@
 11 Claude skills for day trading: scan thousands of charts, track breaking news, time every entry and exit, and replay every outcome before you risk a dollar.
 
 Free, MIT, no signup, no API key. The tools are plain Python that read free
-public data: Yahoo Finance charts, Nasdaq Trader's symbol lists, SEC EDGAR
+public data: Yahoo Finance charts, NSE and BSE listing files, SEC EDGAR
 and the House Clerk.
 
 One scans thousands of charts for setups. Another tracks breaking news on
@@ -126,7 +126,7 @@ All standard-library Python. The data tools read public endpoints and are
 polite about it.
 
 ```bash
-python3 trader-scanner/scan.py universe                                # ~5,900 US stocks, Nasdaq Trader
+python3 trader-scanner/scan.py universe                                # ~5,000 NSE + BSE stocks
 python3 trader-scanner/scan.py daily                                   # pre-market setups, whole universe
 python3 trader-scanner/scan.py orb --at 10:15                          # opening-range breakouts so far
 python3 trader-news/news.py --tickers TSLA --hours 12                  # headlines, 8-Ks, today's move

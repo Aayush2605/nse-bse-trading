@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Chart Scanner for trader-scanner: scan thousands of charts for setups. Standard library only.
 
-    python3 scan.py universe                          # NSE equity list -> trader/universe.txt
+    python3 scan.py universe                          # every NSE + BSE stock -> trader/universe.txt
     python3 scan.py daily                             # before the open: daily setups -> trader/watchlist.json
     python3 scan.py daily --symbols TSLA,NVDA,AMD     # or --watchlist FILE, or --limit 200
     python3 scan.py orb                               # after 9:35 AM IST: opening-range breakouts so far
     python3 scan.py orb --at 10:15 --or-minutes 15    # cut the clock at 10:15 AM ET
     python3 scan.py orb --offline wall5m.json.gz --now "2026-10-19 10:15" --min-price 0
 
-universe  Downloads NSE's equity list (EQUITY_L.csv) and keeps the EQ series:
-          the normal rolling-settlement shares you can trade intraday. BE
-          (trade-for-trade), SM (SME) and the rest are out. Symbols are
-          written bare (RELIANCE); the Yahoo calls add .NS. For a BSE-only
-          stock pass it with its suffix, e.g. --symbols XYZ.BO.
+universe  Every listed equity on NSE and BSE: NSE's EQUITY_L.csv (main board),
+          SME_EQUITY_L.csv (NSE Emerge) and BSE's latest equity bhavcopy.
+          A stock on both is kept once under its NSE symbol (matched by
+          ISIN); NSE symbols are bare (RELIANCE -> RELIANCE.NS on Yahoo),
+          NSE SME ones are written as Yahoo has them (XYZ-SM.NS) and
+          BSE-only ones carry .BO. Trade-for-trade stocks (NSE BE/BZ/SME,
+          BSE T/XT/Z...) are kept but tagged T2T: they are delivery only.
 
 daily     Pre-market scan of daily CLOSES (Yahoo spark: 20 symbols a request,
           3 months of 1-day bars, closes only). Liquidity from the spark meta:
@@ -71,8 +73,15 @@ import urllib.request
 
 UA = "Mozilla/5.0 (compatible; day-trader-skill/2.0; +https://github.com/Jakeschincariol/day-trader-skill)"
 YAHOO_HOSTS = ("https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com")
-NSE_FILE = "EQUITY_L.csv"
-NSE_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+UNIVERSE_SOURCES = (  # (offline file name, URL); the BSE URL takes a YYYYMMDD trading date
+    ("EQUITY_L.csv", "https://archives.nseindia.com/content/equities/EQUITY_L.csv"),
+    ("SME_EQUITY_L.csv", "https://archives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"),
+    ("bse.csv", "https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_%s_F_0000.CSV"),
+)
+# Trade-for-trade: delivery only, no intraday square-off. Still listed; day trades on them are not possible.
+# shortcut: BSE's T2T groups change by circular; this is the common set, check bseindia.com if a scrip looks off.
+T2T_NSE = {"BE", "BZ", "ST", "SM", "SZ"}
+T2T_BSE = {"T", "XT", "MT", "TS", "ZP", "Z"}
 SPARK_MAX = 20      # Yahoo's spark answers 400 above 20 symbols
 PAUSE = 0.3         # seconds between requests: be polite to free endpoints
 BACKOFF = 5.0       # seconds to wait before the one retry after a 429
@@ -391,22 +400,60 @@ SOFT_OUT = [
 ]
 
 
-def build_universe(text):
-    """NSE EQUITY_L.csv text -> (kept [(SYM, name)], counts). Keeps the EQ series only."""
+def _csv(text):
     import csv
     import io
-    rows = list(csv.DictReader(io.StringIO(text.lstrip("\ufeff"))))
+    return [{(k or "").strip(): (v or "").strip() for k, v in r.items()}
+            for r in csv.DictReader(io.StringIO((text or "").lstrip("\ufeff")))]
+
+
+def build_universe(nse, sme="", bse=""):
+    """NSE EQUITY_L.csv, NSE SME_EQUITY_L.csv and a BSE equity bhavcopy (texts) ->
+    (kept [(SYM, name, tag)], counts). Every listed equity: a stock on both exchanges
+    is kept once, under its NSE symbol (by ISIN); a BSE-only stock gets SYM.BO.
+    tag is "NSE EQ", "BSE A", ... with " T2T" when it cannot be traded intraday."""
+    rows = _csv(nse)
     if not rows or "SYMBOL" not in rows[0]:
         raise ScanError("not NSE's EQUITY_L.csv (no SYMBOL column)")
-    kept, counts = {}, {"rows": len(rows)}
-    for r in rows:
-        r = {k.strip(): (v or "").strip() for k, v in r.items() if k}
-        series = r.get("SERIES") or "?"
-        why = "keep" if series == "EQ" else "series " + series
-        counts[why] = counts.get(why, 0) + 1
-        if why == "keep":
-            kept[r["SYMBOL"].upper()] = " ".join(r.get("NAME OF COMPANY", "").split())
-    return sorted(kept.items()), counts
+    kept, isins, counts = {}, set(), {"rows": 0}
+
+    def add(sym, name, tag, isin, src):
+        counts["rows"] += 1
+        if isin and isin in isins:
+            counts["on both exchanges"] = counts.get("on both exchanges", 0) + 1
+            return
+        if isin:
+            isins.add(isin)
+        kept[sym] = (" ".join(name.split()), tag)
+        counts[src] = counts.get(src, 0) + 1
+
+    for r in rows + _csv(sme):
+        series = r.get("SERIES", "")
+        sme = series in ("SM", "ST", "SZ")
+        add(r["SYMBOL"].upper() + ("-SM.NS" if sme else ""), r.get("NAME OF COMPANY") or r.get("NAME_OF_COMPANY", ""),
+            "NSE " + series + (" T2T" if series in T2T_NSE else ""),
+            r.get("ISIN NUMBER") or r.get("ISIN_NUMBER", ""), "NSE SME" if sme else "NSE")
+    for r in _csv(bse):
+        if r.get("FinInstrmTp", "STK") != "STK" or not r.get("TckrSymb"):
+            continue
+        grp = r.get("SctySrs", "")
+        name = r.get("FinInstrmNm", "").upper()
+        # names are cut at 30 characters, so match the start of the words
+        if grp in ("E", "F", "G", "IF") or re.search(r"MUTUAL F|\bETF\b|\bBEES", name) or "ETF" in r["TckrSymb"].upper():
+            counts["BSE funds and bonds (not stocks)"] = counts.get("BSE funds and bonds (not stocks)", 0) + 1
+            continue
+        add(r["TckrSymb"].upper() + ".BO", r.get("FinInstrmNm", ""),
+            "BSE " + grp + (" T2T" if grp in T2T_BSE else ""), r.get("ISIN", ""), "BSE only")
+    counts["keep"] = len(kept)
+    counts["T2T (no intraday)"] = sum(1 for _, t in kept.values() if t.endswith("T2T"))
+    return sorted((k, n, t) for k, (n, t) in kept.items()), counts
+
+
+def last_trading_day(d):
+    """d, or the trading day before it."""
+    while session(d) is None:
+        d -= datetime.timedelta(days=1)
+    return d
 
 
 # ---------------------------------------------------------------- daily setups
@@ -768,39 +815,54 @@ def money(x):
 
 def cmd_universe(a):
     t0 = time.time()
-    if a.offline:
-        p = os.path.join(a.offline, NSE_FILE)
-        if not os.path.exists(p):
-            raise ScanError("no %s in %s" % (NSE_FILE, a.offline))
-        with open(p, encoding="utf-8", errors="replace") as fh:
-            text = fh.read()
-    else:
-        try:
-            text = http_get(NSE_URL, timeout=60)
-        except urllib.error.HTTPError as e:
-            raise ScanError("nseindia.com answered HTTP %d for %s" % (e.code, NSE_FILE))
-        except (urllib.error.URLError, OSError) as e:
-            raise ScanError("could not reach nseindia.com: %s" % getattr(e, "reason", e))
-    kept, counts = build_universe(text)
+    texts = []
+    day = last_trading_day(to_ist(parse_now(None)).date())
+    for fname, url in UNIVERSE_SOURCES:
+        if a.offline:
+            p = os.path.join(a.offline, fname)
+            if not os.path.exists(p):
+                if fname == "EQUITY_L.csv":
+                    raise ScanError("no %s in %s" % (fname, a.offline))
+                texts.append("")
+                continue
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                texts.append(fh.read())
+            continue
+        text = ""
+        for _ in range(5):  # BSE posts the day's file after the close: walk back to the last one there
+            u = url % day.strftime("%Y%m%d") if "%s" in url else url
+            try:
+                text = http_get(u, timeout=60)
+                break
+            except (urllib.error.URLError, OSError) as e:
+                if fname == "EQUITY_L.csv":
+                    raise ScanError("could not get NSE's %s: %s" % (fname, getattr(e, "reason", e)))
+                if "%s" not in url:
+                    break
+                day = last_trading_day(day - datetime.timedelta(days=1))
+        if not text:
+            print("Warning: could not get %s; the list is missing those stocks." % fname, file=sys.stderr)
+        texts.append(text)
+    kept, counts = build_universe(*texts)
     if not a.no_write:
         d = os.path.dirname(a.out)
         if d:
             os.makedirs(d, exist_ok=True)
         with open(a.out, "w", encoding="utf-8") as fh:
-            for sym, name in kept:
-                fh.write("%s|%s\n" % (sym, name))
+            for sym, name, tag in kept:
+                fh.write("%s|%s|%s\n" % (sym, name, tag))
     dropped = {k: v for k, v in counts.items() if k not in ("keep", "rows")}
     if a.json:
         print(json.dumps({"count": len(kept), "rows": counts.get("rows", 0), "files_created": created,
                           "dropped": dropped, "out": None if a.no_write else a.out,
                           "seconds": round(time.time() - t0, 1)}, indent=2))
     else:
-        print("NSE equity list: %s rows." % "{:,}".format(counts.get("rows", 0)))
-        print("Kept %s NSE stocks in the EQ series." % "{:,}".format(len(kept)))
-        print("Dropped: " + ", ".join("%s %s" % ("{:,}".format(v), k)
+        print("NSE main, NSE SME and BSE lists: %s rows." % "{:,}".format(counts.get("rows", 0)))
+        print("Kept %s listed stocks (each once)." % "{:,}".format(len(kept)))
+        print("Breakdown: " + ", ".join("%s %s" % ("{:,}".format(v), k)
                                       for k, v in sorted(dropped.items(), key=lambda kv: -kv[1])) + ".")
         if not a.no_write:
-            print("Wrote %s (one SYMBOL|Name a line)." % a.out)
+            print("Wrote %s (one SYMBOL|Name|exchange group a line; T2T = delivery only, no intraday)." % a.out)
     return 0 if kept else 1
 
 
@@ -955,9 +1017,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Chart Scanner (trader-scanner): daily setups and opening-range breakouts.")
     sub = ap.add_subparsers(dest="cmd")
 
-    p = sub.add_parser("universe", help="download NSE's equity list -> trader/universe.txt")
+    p = sub.add_parser("universe", help="download every NSE and BSE listing -> trader/universe.txt")
     p.add_argument("--out", default=DEFAULT_UNIVERSE)
-    p.add_argument("--offline", metavar="DIR", help="a folder with EQUITY_L.csv")
+    p.add_argument("--offline", metavar="DIR", help="a folder with EQUITY_L.csv (and optional SME_EQUITY_L.csv, bse.csv)")
     p.add_argument("--no-write", action="store_true")
     p.add_argument("--pause", type=float, default=PAUSE)
     p.add_argument("--json", action="store_true")
