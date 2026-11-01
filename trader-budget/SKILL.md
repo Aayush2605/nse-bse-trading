@@ -8,11 +8,14 @@ description: >-
   writes ONE bracket order (entry, stop-loss, take-profit) to
   trader/orders.json in the exact shape of Alpaca's place_stock_order. A stop
   too far away for your max loss is a plain refusal, not a smaller order.
-  Nothing is placed. Use when the user says "how many shares", "size this
-  trade", "how much should I buy", "I have $5,000", "I only want to risk $50
-  a trade", "set my rules", "keep 10% in cash", or after /trader-exit writes
+  Counts Indian intraday charges (brokerage, STT, NSE transaction, SEBI,
+  stamp duty, GST): the loss at the stop INCLUDING charges must fit your max
+  loss, it shows net profit at the target, and refuses a trade whose charges
+  eat the whole profit. Nothing is placed. Use when the user says "how many shares", "size this
+  trade", "how much should I buy", "I have ₹50,000", "I only want to risk ₹500
+  a trade", "what are the charges", "set my rules", "keep 10% in cash", or after /trader-exit writes
   a plan.
-argument-hint: "[budget in dollars]"
+argument-hint: "[budget in rupees]"
 ---
 
 # trader-budget

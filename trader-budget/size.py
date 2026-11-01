@@ -16,7 +16,8 @@ checks the order and trader-broker asks you yes or no.
 How many shares. Whole shares only: Alpaca takes no fractions in a bracket.
 
     shares = floor of the smallest of
-      max loss       max_loss_per_trade_usd / risk per share (entry minus stop)
+      max loss       max_loss_per_trade_usd / risk per share (entry minus stop),
+                     then fewer until price loss + charges at the stop fit it
       position cap   budget x max_position_pct / entry
       max order      max_order_usd / entry
       cash           (budget minus the cash buffer) / entry
@@ -63,19 +64,21 @@ DEFAULTS = {
     "budget": None,
     "cash_buffer_pct": 10,
     "max_position_pct": 75,
-    "max_order_usd": 4000,
-    "min_order_usd": 5,
-    "max_loss_per_trade_usd": 50,
-    "max_daily_loss_usd": 150,
+    "max_order_usd": 40000,
+    "min_order_usd": 500,
+    "max_loss_per_trade_usd": 500,
+    "max_daily_loss_usd": 1500,
     "max_trades_per_day": 3,
     "max_orders_per_day": 10,
     "min_reward_risk": 1.0,
+    "brokerage_per_order": 20,   # Zerodha intraday: Rs 20 or 0.03% an order, whichever is lower
+    "brokerage_pct": 0.03,
     "require_stop": True,
     "no_entries_before": "09:30",
     "no_entries_after": "14:45",
     "flat_by": "15:15",
     "fractional": False,
-    "broker": "alpaca",
+    "broker": "zerodha",
     "paper": True,
     "blocked": [],
     "allow_options": False,
@@ -84,6 +87,13 @@ DEFAULTS = {
     "pdt_guard": False,
 }
 EPS = 1e-9
+# NSE equity intraday statutory charges, % of turnover (zerodha.com/charges, read 2026-11-01).
+# shortcut: IPFT (Rs 0.01 a crore) is left out; check the rates again after each Union Budget.
+STT_SELL_PCT = 0.025
+NSE_TXN_PCT = 0.00307
+SEBI_PCT = 0.0001       # Rs 10 a crore
+STAMP_BUY_PCT = 0.003
+GST_PCT = 18
 FRESH_MINUTES = 15
 SETUP_WORDS = {"orb": "opening-range breakout", "flag": "flag", "bounce": "oversold bounce"}
 
@@ -284,6 +294,21 @@ def money(x):
     return "₹" + "{:,.2f}".format(x)
 
 
+def charges(qty, buy, sell, c=None):
+    """Round-trip intraday charges for qty shares bought at buy and sold at sell -> dict, rupees."""
+    c = c or DEFAULTS
+    b, sl = qty * buy, qty * sell
+    def brok(turnover):
+        return min(float(c.get("brokerage_per_order") or 0), turnover * float(c.get("brokerage_pct") or 0) / 100)
+    out = {"brokerage": brok(b) + brok(sl) if qty else 0.0, "stt": sl * STT_SELL_PCT / 100,
+           "exchange": (b + sl) * NSE_TXN_PCT / 100, "sebi": (b + sl) * SEBI_PCT / 100,
+           "stamp": b * STAMP_BUY_PCT / 100}
+    out["gst"] = (out["brokerage"] + out["exchange"] + out["sebi"]) * GST_PCT / 100
+    out = {k: round(v, 2) for k, v in out.items()}
+    out["total"] = round(sum(out.values()), 2)
+    return out
+
+
 # ---------------------------------------------------------------- plan mode (the default)
 
 def size_trade(plan, cfg, budget=None, limit=None, price=None, cash=None, today=None):
@@ -366,10 +391,16 @@ def size_trade(plan, cfg, budget=None, limit=None, price=None, cash=None, today=
 
     qty = max(0, min(l["shares"] for l in limits))
     bound = [l["name"] for l in limits if l["shares"] == qty]
+    if max_loss:  # the max loss counts the charges too: the loss at the stop is price loss plus charges
+        while qty and qty * risk_c / 100.0 + charges(qty, ref, stop, c)["total"] > max_loss + 0.005:
+            qty -= 1
+            bound = ["max loss"]
     for l in limits:
         l["binds"] = l["name"] == bound[0]
     cost = round(qty * ref, 2)
     loss = round(qty * risk_c / 100.0, 2)
+    at_stop, at_target = charges(qty, ref, stop, c), charges(qty, ref, target, c)
+    net_profit = round(qty * reward_c / 100.0 - at_target["total"], 2)
     refusal = None
     if qty == 0:
         if bound[0] == "max loss":
@@ -379,6 +410,10 @@ def size_trade(plan, cfg, budget=None, limit=None, price=None, cash=None, today=
         else:
             refusal = ("one share of %s costs %s, more than your %s limit (%s). No order."
                        % (sym, money(ref), bound[0], limits[[l["name"] for l in limits].index(bound[0])]["how"]))
+    elif net_profit <= 0:
+        refusal = ("the charges (%s) eat the whole profit at the target (%d x %s = %s). No order: the move "
+                   "is too small for the charges. Trade more shares or skip it."
+                   % (money(at_target["total"]), qty, _price(reward_c / 100.0), money(qty * reward_c / 100.0)))
     elif _f(c.get("min_reward_risk")) and reward_c < _f(c["min_reward_risk"]) * risk_c - EPS:
         refusal = ("reward:risk %.2f (target %s, entry %s, stop %s) is under your minimum %s, so trader-risk "
                    "would block it. No order. Skip it, or make a new plan with trader-exit."
@@ -394,7 +429,8 @@ def size_trade(plan, cfg, budget=None, limit=None, price=None, cash=None, today=
         "stop_label": plan.get("stop_label", ""), "target_label": plan.get("target_label", ""),
         "budget": budget, "cash_buffer_pct": buf_pct, "cash_buffer": cash_buffer, "cash_available": available,
         "max_loss_per_trade_usd": max_loss, "limits": limits, "qty": qty, "bound_by": bound[0],
-        "cost": cost, "max_loss": loss, "flat_by": plan.get("flat_by") or c.get("flat_by"),
+        "cost": cost, "max_loss": loss, "charges_at_stop": at_stop, "charges_at_target": at_target,
+        "net_loss": round(loss + at_stop["total"], 2), "net_profit": net_profit, "flat_by": plan.get("flat_by") or c.get("flat_by"),
         "order_type": "limit" if limit is not None else "market", "refusal": refusal,
     }
 
@@ -419,7 +455,8 @@ def bracket_order(s):
         "stop_loss_stop_price": _price(s["stop"]),
         "why": why,
         "plan": {"entry": s["entry"], "stop": s["stop"], "target": s["target"],
-                 "risk_per_share": s["risk_per_share"], "max_loss": s["max_loss"], "setup": s["setup"],
+                 "risk_per_share": s["risk_per_share"], "max_loss": s["max_loss"], "net_loss": s["net_loss"],
+                 "net_profit": s["net_profit"], "charges_at_stop": s["charges_at_stop"]["total"], "setup": s["setup"],
                  "entry_time": s["entry_time"], "flat_by": s["flat_by"]},
     })
     return o
@@ -453,6 +490,12 @@ def plan_report(s, order, notes=()):
     lines.append("Size: %d shares of %s = %s at %s. Max loss at the stop: %d x %s = %s."
                  % (s["qty"], s["symbol"], money(s["cost"]), _price(s["entry"]), s["qty"],
                     _price(s["risk_per_share"]), money(s["max_loss"])))
+    ch = s["charges_at_stop"]
+    lines.append("Charges for the round trip (at the stop): brokerage %s, STT %s, exchange %s, SEBI %s, "
+                 "stamp %s, GST %s = %s." % tuple(money(ch[k]) for k in
+                                                ("brokerage", "stt", "exchange", "sebi", "stamp", "gst", "total")))
+    lines.append("Net loss at the stop: %s. Net profit at the target: %s (after %s charges)."
+                 % (money(s["net_loss"]), money(s["net_profit"]), money(s["charges_at_target"]["total"])))
     lines.append("A stop is an order, not a promise: in a fast market it can fill below %s." % _price(s["stop"]))
     lines.append("")
     lines.append("Proposed bracket order (place_stock_order arguments, nothing has been placed):")

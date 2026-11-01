@@ -16,6 +16,7 @@ entry = load("trader-entry", "entry")
 exitp = load("trader-exit", "exit")
 risk = load("trader-risk", "check")
 tm = load("trader-timemachine", "timemachine")
+size = load("trader-budget", "size")
 
 IDIR = os.path.join(FIX, "india")
 ICICI = os.path.join(IDIR, "ICICIBANK-2026-10-30-5m.json")
@@ -78,6 +79,27 @@ class RealSession(unittest.TestCase):
         self.assertEqual(full[0][1][40]["c"], 40.0)                         # last close carried
         too_short = [b for b in bars if b["slot"] < 60]
         self.assertEqual(tm.full_sessions(tm.split_sessions(too_short), "2026-10-30")[0], [])
+
+
+class Charges(unittest.TestCase):
+    PLAN = {"symbol": "ICICIBANK", "entry": 1394.50, "stop": 1387.15, "target": 1401.85}
+
+    def test_round_trip_by_hand(self):
+        # 100 x 1000 -> 1010: brokerage 20+20, STT 25.25, exchange 6.17, SEBI 0.20, stamp 3.00, GST 8.35
+        self.assertEqual(size.charges(100, 1000, 1010)["total"], 82.97)
+        self.assertEqual(size.charges(1, 100, 101)["brokerage"], 0.06)       # 0.03% beats Rs 20
+
+    def test_max_loss_counts_the_charges(self):
+        s = size.size_trade(self.PLAN, {"max_order_usd": 10 ** 7, "max_position_pct": 100, "cash_buffer_pct": 0},
+                            budget=10 ** 6)
+        self.assertLess(s["qty"], 68)                                         # 500 / 7.35 = 68 before charges
+        self.assertLessEqual(s["net_loss"], 500)
+        self.assertGreater(size.size_trade(dict(self.PLAN), {}, budget=10 ** 6)["net_profit"], 0)
+
+    def test_charges_that_eat_the_profit_refuse(self):
+        tiny = dict(self.PLAN, stop=1394.00, target=1394.60)
+        s = size.size_trade(tiny, {"max_order_usd": 3000, "min_order_usd": 0}, budget=50000)
+        self.assertIn("charges", s["refusal"])
 
 
 if __name__ == "__main__":
