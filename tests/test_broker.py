@@ -8,12 +8,12 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, ROOT, FIX
 
-ticket = load("trader-broker", "ticket")
-check = load("trader-risk", "check")
+ticket = load("nse-broker", "ticket")
+check = load("nse-risk", "check")
 
-CFG_PATH = os.path.join(ROOT, "trader-budget", "config.example.json")
-ORDERS_PATH = os.path.join(FIX, "trader-risk", "orders-tsla.json")
-PLAN_PATH = os.path.join(FIX, "trader-budget", "plan-tsla.json")
+CFG_PATH = os.path.join(ROOT, "nse-budget", "config.example.json")
+ORDERS_PATH = os.path.join(FIX, "nse-risk", "orders-tsla.json")
+PLAN_PATH = os.path.join(FIX, "nse-budget", "plan-tsla.json")
 NOW = "2026-10-19 10:15"
 TODAY = "2026-10-19"
 AAPL = {"symbol": "AAPL", "side": "buy", "notional": "1250", "type": "market", "time_in_force": "day"}
@@ -95,7 +95,7 @@ class TicketShape(unittest.TestCase):
 
 class DesktopConfig(unittest.TestCase):
     def test_example_is_paper_with_placeholder_keys(self):
-        with open(os.path.join(ROOT, "trader-broker", "claude_desktop_config.example.json")) as fh:
+        with open(os.path.join(ROOT, "nse-broker", "claude_desktop_config.example.json")) as fh:
             server = json.load(fh)["mcpServers"]["alpaca"]
         self.assertEqual((server["command"], server["args"]), ("uvx", ["alpaca-mcp-server"]))
         self.assertEqual(server["env"]["ALPACA_PAPER_TRADE"], "true")
@@ -147,7 +147,7 @@ class Flow(unittest.TestCase):
         self.assertIn("ORDER 1 of 1, PAPER account, Alpaca", text)
         for part in TSLA_PLAIN.split(" / "):
             self.assertIn("  " + part + "\n", text)
-        self.assertIn("READY: trader-risk PASS", text)
+        self.assertIn("READY: nse-risk PASS", text)
         self.assertIn('"order_class": "bracket"', text)
         self.assertIn('"stop_loss_stop_price": "358.32"', text)
         self.assertNotIn('"plan"', text)
@@ -188,7 +188,7 @@ class Flow(unittest.TestCase):
         self.assertIn("1 placed today", text)
         self.assertIn("max loss $46.88", text)
 
-        # trader-risk now counts it: a second TSLA buy today is a duplicate, and $46.88 is used
+        # nse-risk now counts it: a second TSLA buy today is a duplicate, and $46.88 is used
         res = check.check([tsla()], {"budget": 5000}, state=st, now=check.parse_now("2026-10-19 10:30"))
         self.assertIn("already placed today", " ".join(res["results"][0]["reasons"]))
         self.assertEqual((res["today"]["entries_placed"], res["today"]["loss_at_risk"]), (1, 46.88))
@@ -254,7 +254,7 @@ class Flow(unittest.TestCase):
     def test_blocked_orders_are_never_ready(self):
         self.assertEqual(self.run_risk(now="2026-10-19 09:40"), 1)
         code, text, _ = run(self.args("show", "--index", "1", now="2026-10-19 09:40"))
-        self.assertIn("BLOCKED by trader-risk: window: no new entries before 09:45", text)
+        self.assertIn("BLOCKED by nse-risk: window: no new entries before 09:45", text)
         code, _, _ = run(self.args("approve", "--index", "1", "--reply", "yes", now="2026-10-19 09:40"))
         self.assertEqual(code, 1)
 

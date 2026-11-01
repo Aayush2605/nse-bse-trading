@@ -7,12 +7,12 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, ROOT, FIX
 
-size = load("trader-budget", "size")
+size = load("nse-budget", "size")
 
-CFG = os.path.join(ROOT, "trader-budget", "config.example.json")
-PLAN = os.path.join(FIX, "trader-budget", "plan-tsla.json")
-TARGETS = os.path.join(ROOT, "trader-budget", "targets.example.json")
-TOP5 = os.path.join(FIX, "trader-budget", "berkshire-q2-2026-top5.json")
+CFG = os.path.join(ROOT, "nse-budget", "config.example.json")
+PLAN = os.path.join(FIX, "nse-budget", "plan-tsla.json")
+TARGETS = os.path.join(ROOT, "nse-budget", "targets.example.json")
+TOP5 = os.path.join(FIX, "nse-budget", "berkshire-q2-2026-top5.json")
 NOW = "2026-10-19 10:15"
 TODAY = "2026-10-19"
 REEL_V1 = {"AAPL": 1250, "AXP": 1119, "GOOGL": 823, "KO": 708, "BAC": 600}
@@ -106,7 +106,7 @@ class TheReel(unittest.TestCase):
         self.assertIn("$46.88", why)
 
     def test_the_fixture_orders_file_is_what_it_writes(self):
-        with open(os.path.join(FIX, "trader-risk", "orders-tsla.json")) as fh:
+        with open(os.path.join(FIX, "nse-risk", "orders-tsla.json")) as fh:
             fixture = json.load(fh)["orders"][0]
         self.assertEqual(size.bracket_order(size.size_trade(plan(), cfg(), today=TODAY)), fixture)
 

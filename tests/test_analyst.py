@@ -7,8 +7,8 @@ from contextlib import redirect_stderr, redirect_stdout
 
 from _load import FIX, load
 
-facts = load("trader-analyst", "facts")
-DIR = os.path.join(FIX, "trader-analyst")
+facts = load("nse-results", "facts")
+DIR = os.path.join(FIX, "nse-results")
 
 
 def companyfacts(cik):

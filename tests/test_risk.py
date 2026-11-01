@@ -8,12 +8,12 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, ROOT, FIX
 
-check = load("trader-risk", "check")
-ticket = load("trader-broker", "ticket")
+check = load("nse-risk", "check")
+ticket = load("nse-broker", "ticket")
 
-CFG_PATH = os.path.join(ROOT, "trader-budget", "config.example.json")
-TSLA_PATH = os.path.join(FIX, "trader-risk", "orders-tsla.json")
-V1_ORDERS_PATH = os.path.join(FIX, "trader-risk", "orders-reel.json")
+CFG_PATH = os.path.join(ROOT, "nse-budget", "config.example.json")
+TSLA_PATH = os.path.join(FIX, "nse-risk", "orders-tsla.json")
+V1_ORDERS_PATH = os.path.join(FIX, "nse-risk", "orders-reel.json")
 NOW = "2026-10-19 10:15"
 TODAY = "2026-10-19"
 V1_TODAY = "2026-10-13"

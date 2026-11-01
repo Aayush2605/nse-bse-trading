@@ -8,8 +8,8 @@ from contextlib import redirect_stderr, redirect_stdout
 
 from _load import FIX, load
 
-news = load("trader-news", "news")
-DIR = os.path.join(FIX, "trader-news")
+news = load("nse-news", "news")
+DIR = os.path.join(FIX, "nse-news")
 NOW = "2026-10-14T00:00:00+00:00"
 
 
@@ -116,10 +116,10 @@ class Check(unittest.TestCase):
     def test_tickers_from_watchlist_and_plan(self):
         wl = os.path.join(self.tmp.name, "watchlist.json")
         with open(wl, "w") as fh:
-            json.dump({"created_by": "trader-scanner", "hits": [{"symbol": "KO", "setups": ["orb"]}]}, fh)
+            json.dump({"created_by": "nse-scanner", "hits": [{"symbol": "KO", "setups": ["orb"]}]}, fh)
         plan = os.path.join(self.tmp.name, "plan.json")
         with open(plan, "w") as fh:
-            json.dump({"created_by": "trader-exit", "symbol": "AAPL"}, fh)
+            json.dump({"created_by": "nse-exit", "symbol": "AAPL"}, fh)
         self.assertEqual(sorted(news.watch_from_files("/nonexistent.json", wl, plan)), ["AAPL", "KO"])
         args = list(self.base)
         args[args.index("--watchlist") + 1] = wl

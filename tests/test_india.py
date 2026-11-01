@@ -11,12 +11,12 @@ import unittest
 
 from _load import load, FIX
 
-scan = load("trader-scanner", "scan")
-entry = load("trader-entry", "entry")
-exitp = load("trader-exit", "exit")
-risk = load("trader-risk", "check")
-tm = load("trader-timemachine", "timemachine")
-size = load("trader-budget", "size")
+scan = load("nse-scanner", "scan")
+entry = load("nse-entry", "entry")
+exitp = load("nse-exit", "exit")
+risk = load("nse-risk", "check")
+tm = load("nse-timemachine", "timemachine")
+size = load("nse-budget", "size")
 
 IDIR = os.path.join(FIX, "india")
 ICICI = os.path.join(IDIR, "ICICIBANK-2026-10-30-5m.json")

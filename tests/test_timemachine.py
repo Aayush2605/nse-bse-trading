@@ -13,17 +13,17 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, FIX
 
-tm = load("trader-timemachine", "timemachine")
+tm = load("nse-timemachine", "timemachine")
 
-DIR = os.path.join(FIX, "trader-timemachine")
+DIR = os.path.join(FIX, "nse-timemachine")
 TSLA = os.path.join(DIR, "TSLA-60d5m.json.gz")   # Yahoo v8 chart, range=60d interval=5m, fetched 2026-10-19 10:49 ET
 with gzip.open(TSLA, "rt", encoding="utf-8") as _fh:
     TEXT = _fh.read()
 NOW = "2026-10-19 10:50"
 NOW_UTC = tm.parse_now(NOW)
 
-# the reel's plan, as trader-exit writes it (CONTRACT.md)
-PLAN = {"created_by": "trader-exit", "symbol": "TSLA", "side": "buy", "date": "2026-10-19", "setup": "orb",
+# the reel's plan, as nse-exit writes it (CONTRACT.md)
+PLAN = {"created_by": "nse-exit", "symbol": "TSLA", "side": "buy", "date": "2026-10-19", "setup": "orb",
         "entry": 364.18, "entry_time": "10:15 AM", "entry_bar": 8, "interval": "5m",
         "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
         "stop": 358.32, "stop_rule": "or_mid", "stop_label": "opening-range midpoint",
@@ -532,11 +532,11 @@ class Cli(unittest.TestCase):
         self.assertIn("target first   29.4 %", text)
         self.assertIn("Close to a coin flip: target first 29.4 % vs stop first 25.5 %.", text)
         self.assertIn("Wrote %s." % self.out, text)
-        self.assertIn("/trader-budget", text)
+        self.assertIn("/nse-budget", text)
         with open(self.out) as fh:
             doc = json.load(fh)
         self.assertEqual(sorted(k for k in ("plan", "mc", "history") if k in doc), ["history", "mc", "plan"])
-        self.assertEqual(doc["created_by"], "trader-timemachine")
+        self.assertEqual(doc["created_by"], "nse-timemachine")
         self.assertEqual(doc["source"], "offline")
         self.assertEqual((doc["mc"]["p_target"], doc["mc"]["avg_R"]), (0.2938, 0.034))
         self.assertEqual(sha(doc["mc"]["sample_paths"]), SIM_PATHS)

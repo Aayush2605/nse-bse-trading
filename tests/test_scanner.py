@@ -10,9 +10,9 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, FIX
 
-scan = load("trader-scanner", "scan")
+scan = load("nse-scanner", "scan")
 
-SDIR = os.path.join(FIX, "trader-scanner")
+SDIR = os.path.join(FIX, "nse-scanner")
 WALL = os.path.join(SDIR, "wall5m-2026-10-19.json.gz")       # 234 real 5-min charts, Oct 19 2026
 DAILY = os.path.join(SDIR, "daily-spark-2026-10-19.json")    # 19 real daily charts as one spark answer
 LIVE = os.path.join(SDIR, "spark-3mo-live-2026-10-20.json")  # a real 20-symbol spark answer
@@ -520,7 +520,7 @@ class Cli(unittest.TestCase):
         doc = self.read(self.wl)
         self.assertEqual({k: doc[k] for k in ("created_by", "created_at", "mode", "as_of", "universe", "scanned",
                                               "source")},
-                         {"created_by": "trader-scanner", "created_at": "2026-10-19T14:15:00Z", "mode": "orb",
+                         {"created_by": "nse-scanner", "created_at": "2026-10-19T14:15:00Z", "mode": "orb",
                           "as_of": "2026-10-19 10:15 ET", "universe": 234, "scanned": 231, "source": "yahoo"})
         self.assertEqual(len(doc["hits"]), 42)
         self.assertIn({"symbol": "TSLA", "setups": ["orb"], "price": 364.18, "at": "10:15 AM", "bar_start": "10:10",

@@ -6,14 +6,14 @@ import unittest
 from _load import ROOT
 
 # v2, the day-trading pack: the eleven folders the reel's repo card shows
-SKILLS = ["trader-scanner", "trader-news", "trader-entry", "trader-exit", "trader-timemachine",
-          "trader-risk", "trader-budget", "trader-broker", "trader-alerts", "trader-analyst",
-          "trader-pelosi"]
+SKILLS = ["nse-scanner", "nse-news", "nse-entry", "nse-exit", "nse-timemachine",
+          "nse-risk", "nse-budget", "nse-broker", "nse-alerts", "nse-results",
+          "nse-insider"]
 ABOUT = ("11 Claude skills for day trading: scan thousands of charts, track breaking news, time every "
          "entry and exit, and replay every outcome before you risk a dollar.")
 # skills on the way to an order carry the safety block
-ORDER_PATH = ["trader-scanner", "trader-entry", "trader-exit", "trader-timemachine", "trader-budget",
-              "trader-pelosi", "trader-risk", "trader-broker", "trader-alerts"]
+ORDER_PATH = ["nse-scanner", "nse-entry", "nse-exit", "nse-timemachine", "nse-budget",
+              "nse-insider", "nse-risk", "nse-broker", "nse-alerts"]
 V1_ONLY = ["trader-copycat", "trader-screener", "trader-tax", "trader-rebalance"]
 
 
@@ -60,22 +60,22 @@ class Repo(unittest.TestCase):
     def test_plugin_manifest_points_at_the_root_skills(self):
         with open(os.path.join(ROOT, ".claude-plugin", "plugin.json")) as fh:
             plugin = json.load(fh)
-        self.assertEqual(plugin["name"], "day-trader-skill")
+        self.assertEqual(plugin["name"], "nse-bse-trading")
         self.assertEqual(plugin["skills"], "./")
         self.assertEqual(plugin["description"], ABOUT)
         with open(os.path.join(ROOT, ".claude-plugin", "marketplace.json")) as fh:
             market = json.load(fh)
-        self.assertEqual(market["name"], "day-trader-skill")
-        self.assertEqual(market["plugins"][0]["name"], "day-trader-skill")
+        self.assertEqual(market["name"], "nse-bse-trading")
+        self.assertEqual(market["plugins"][0]["name"], "nse-bse-trading")
 
     def test_readme_carries_the_reel_copy(self):
         with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as fh:
             readme = " ".join(fh.read().split())
         self.assertTrue(readme.startswith("# The Day Trader skill"))
         for line in (ABOUT,
-                     "https://github.com/Jakeschincariol/day-trader-skill install skill",
-                     "/plugin marketplace add Jakeschincariol/day-trader-skill",
-                     "/plugin install day-trader-skill@day-trader-skill",
+                     "https://github.com/Aayush2605/nse-bse-trading install skill",
+                     "/plugin marketplace add Aayush2605/nse-bse-trading",
+                     "/plugin install nse-bse-trading@nse-bse-trading",
                      "## Fine print"):
             self.assertIn(line, readme)
         for s in SKILLS:
@@ -119,7 +119,7 @@ class Repo(unittest.TestCase):
                         self.assertNotIn(bad, src, "%s/%s" % (s, f))
 
     def test_day_trading_limits_ship_in_the_example_config(self):
-        with open(os.path.join(ROOT, "trader-budget", "config.example.json")) as fh:
+        with open(os.path.join(ROOT, "nse-budget", "config.example.json")) as fh:
             cfg = json.load(fh)
         for k in ("max_loss_per_trade_usd", "max_daily_loss_usd", "max_trades_per_day",
                   "min_reward_risk", "require_stop", "no_entries_after", "flat_by"):
@@ -129,7 +129,7 @@ class Repo(unittest.TestCase):
         self.assertIs(cfg.get("allow_margin", False), False)
 
     def test_paper_trading_is_the_default(self):
-        with open(os.path.join(ROOT, "trader-budget", "config.example.json")) as fh:
+        with open(os.path.join(ROOT, "nse-budget", "config.example.json")) as fh:
             cfg = json.load(fh)
         self.assertIs(cfg["paper"], True)
         self.assertIs(cfg.get("allow_options", False), False)

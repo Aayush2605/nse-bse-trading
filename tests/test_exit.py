@@ -1,4 +1,4 @@
-"""trader-exit tests. Bars for the ATR stop reuse tests/fixtures/trader-entry/
+"""nse-exit tests. Bars for the ATR stop reuse tests/fixtures/nse-entry/
 (TSLA's real Oct 19 2026 five-minute bars, see test_entry.py)."""
 
 import io
@@ -12,19 +12,19 @@ from decimal import Decimal
 
 from _load import load, FIX, ROOT
 
-exitp = load("trader-exit", "exit")
-entry = load("trader-entry", "entry")
+exitp = load("nse-exit", "exit")
+entry = load("nse-entry", "entry")
 
-TSLA = os.path.join(FIX, "trader-entry", "TSLA-2026-10-19-5m.json")
+TSLA = os.path.join(FIX, "nse-entry", "TSLA-2026-10-19-5m.json")
 
 # trader/plan.json for the reel, exactly as the contract writes it
-REEL_PLAN = {"created_by": "trader-exit", "symbol": "TSLA", "side": "buy", "date": "2026-10-19", "setup": "orb",
+REEL_PLAN = {"created_by": "nse-exit", "symbol": "TSLA", "side": "buy", "date": "2026-10-19", "setup": "orb",
              "entry": 364.18, "entry_time": "10:15 AM", "entry_bar": 8, "interval": "5m",
              "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
              "stop": 358.32, "stop_rule": "or_mid", "stop_label": "opening-range midpoint",
              "target": 370.04, "target_r": 1.0, "target_label": "1R (one times the risk)",
              "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:15"}
-REEL_ENTRY = {"created_by": "trader-entry", "symbol": "TSLA", "setup": "orb", "side": "buy", "date": "2026-10-19",
+REEL_ENTRY = {"created_by": "nse-entry", "symbol": "TSLA", "setup": "orb", "side": "buy", "date": "2026-10-19",
               "status": "triggered", "time": "10:15 AM", "bar_start": "10:10", "bar_index": 8, "price": 364.18,
               "level": 362.18, "interval": "5m", "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
               "source": "yahoo", "checked_at": "2026-10-19T14:15:00Z"}
@@ -169,7 +169,7 @@ class Cli(unittest.TestCase):
         self.assertIn("Reward:risk   1.0", text)
         self.assertIn("Flat by       15:55", text)
         self.assertIn("not a guarantee", text)
-        self.assertIn("/trader-timemachine", text)
+        self.assertIn("/nse-timemachine", text)
         self.assertNotIn("pro" + "fit", text.lower())   # never on screen
         code, text, _ = self.plan("--write")                       # the defaults: or-mid, 2R
         self.assertEqual(self.read_plan()["target"], 375.90)
@@ -272,15 +272,15 @@ class Cli(unittest.TestCase):
 
 class SkillDoc(unittest.TestCase):
     def test_skill_md(self):
-        with open(os.path.join(ROOT, "trader-exit", "SKILL.md"), encoding="utf-8") as fh:
+        with open(os.path.join(ROOT, "nse-exit", "SKILL.md"), encoding="utf-8") as fh:
             text = fh.read()
-        with open(os.path.join(ROOT, "trader-risk", "SKILL.md"), encoding="utf-8") as fh:
+        with open(os.path.join(ROOT, "nse-risk", "SKILL.md"), encoding="utf-8") as fh:
             risk = fh.read()
-        self.assertTrue(text.startswith("---\nname: trader-exit\n"))
+        self.assertTrue(text.startswith("---\nname: nse-exit\n"))
         self.assertGreater(len(text.splitlines()), 60)
         self.assertEqual(text[text.index("## Safety"):], risk[risk.index("## Safety"):])
         low = " ".join(text.lower().split())
-        for must in ("before the entry", "a stop is a plan, not a guarantee", "day trading loses most people money", "/trader-timemachine", "/trader-budget", "longs only", "$358.32", "$370.04", "$5.86", "375.90", "too tight to survive the spread"):
+        for must in ("before the entry", "a stop is a plan, not a guarantee", "day trading loses most people money", "/nse-timemachine", "/nse-budget", "longs only", "$358.32", "$370.04", "$5.86", "375.90", "too tight to survive the spread"):
             self.assertIn(must, low)
         for never in ("\u2014", "tick " + "by tick", "real " + "time", "pro" + "fit"):
             self.assertNotIn(never, low)

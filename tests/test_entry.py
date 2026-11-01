@@ -1,4 +1,4 @@
-"""trader-entry tests. Fixtures in tests/fixtures/trader-entry/:
+"""nse-entry tests. Fixtures in tests/fixtures/nse-entry/:
 
 TSLA-2026-10-19-5m.json  TSLA's Oct 19 2026 five-minute bars, cut from the reel's
                          TSLA-60d5m.json (Yahoo chart JSON v8, fetched 10:49:45 ET).
@@ -22,9 +22,9 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, FIX, ROOT
 
-entry = load("trader-entry", "entry")
+entry = load("nse-entry", "entry")
 
-EDIR = os.path.join(FIX, "trader-entry")
+EDIR = os.path.join(FIX, "nse-entry")
 TSLA = os.path.join(EDIR, "TSLA-2026-10-19-5m.json")
 DEMO = os.path.join(EDIR, "DEMO-1m-synthetic.json")
 OPEN_TS = 1792416600       # 2026-10-19 09:30 EDT
@@ -499,10 +499,10 @@ class Cli(unittest.TestCase):
         code, text, _ = run(["check", "TSLA", "--offline", TSLA, "--now", "2026-10-19 10:15", "--write"])
         self.assertEqual(code, 0)
         self.assertIn("TRIGGERED 10:15 AM at $364.18", text)
-        self.assertIn("/trader-exit", text)
+        self.assertIn("/nse-exit", text)
         with open(os.path.join("trader", "entry.json")) as fh:
             e = json.load(fh)
-        want = {"created_by": "trader-entry", "symbol": "TSLA", "setup": "orb", "side": "buy", "date": "2026-10-19",
+        want = {"created_by": "nse-entry", "symbol": "TSLA", "setup": "orb", "side": "buy", "date": "2026-10-19",
                 "status": "triggered", "time": "10:15 AM", "bar_start": "10:10", "bar_index": 8, "price": 364.18,
                 "level": 362.18, "interval": "5m", "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
                 "source": "yahoo", "checked_at": "2026-10-19T14:15:00Z"}
@@ -568,7 +568,7 @@ class Cli(unittest.TestCase):
         shutil.copy(DEMO, os.path.join("charts", "DEMO.json"))
         os.mkdir("trader")
         with open(os.path.join("trader", "watchlist.json"), "w") as fh:
-            json.dump({"created_by": "trader-scanner", "hits": [
+            json.dump({"created_by": "nse-scanner", "hits": [
                 {"symbol": "TSLA", "setups": ["orb"], "or_high": 362.18, "or_low": 354.47},
                 {"symbol": "ZZZZ", "setups": ["orb"]}, {"symbol": "DEMO", "setups": ["orb"]}]}, fh)
         code, text, _ = run(["watchlist", "--offline", "charts", "--now", "2026-10-19 10:15"])
@@ -582,20 +582,20 @@ class Cli(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(json.loads(text)[0]["result"]["status"], "waiting")
         code, _, err = run(["watchlist", "--watchlist", "missing.json"])
-        self.assertIn("run /trader-scanner first", err)
+        self.assertIn("run /nse-scanner first", err)
 
 
 class SkillDoc(unittest.TestCase):
     def test_skill_md(self):
-        with open(os.path.join(ROOT, "trader-entry", "SKILL.md"), encoding="utf-8") as fh:
+        with open(os.path.join(ROOT, "nse-entry", "SKILL.md"), encoding="utf-8") as fh:
             text = fh.read()
-        with open(os.path.join(ROOT, "trader-risk", "SKILL.md"), encoding="utf-8") as fh:
+        with open(os.path.join(ROOT, "nse-risk", "SKILL.md"), encoding="utf-8") as fh:
             risk = fh.read()
-        self.assertTrue(text.startswith("---\nname: trader-entry\n"))
+        self.assertTrue(text.startswith("---\nname: nse-entry\n"))
         self.assertGreater(len(text.splitlines()), 60)
         self.assertEqual(text[text.index("## Safety"):], risk[risk.index("## Safety"):])
         low = " ".join(text.lower().split())
-        for must in ("bar by bar", "can lag", "day trading loses most people money", "/trader-exit", "longs only", "in the background", "/loop", "nothing was placed", "10:15 am", "$364.18", "bar 8"):
+        for must in ("bar by bar", "can lag", "day trading loses most people money", "/nse-exit", "longs only", "in the background", "/loop", "nothing was placed", "10:15 am", "$364.18", "bar 8"):
             self.assertIn(must, low)
         for never in ("\u2014", "tick " + "by tick", "real " + "time", "pro" + "fit"):
             self.assertNotIn(never, low)

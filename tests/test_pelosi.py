@@ -8,8 +8,8 @@ from contextlib import redirect_stderr, redirect_stdout
 
 from _load import FIX, load
 
-ptr = load("trader-pelosi", "ptr")
-DIR = os.path.join(FIX, "trader-pelosi")
+ptr = load("nse-insider", "ptr")
+DIR = os.path.join(FIX, "nse-insider")
 ZIP = os.path.join(DIR, "2026FD.zip")
 
 

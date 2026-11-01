@@ -11,10 +11,10 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from _load import load, ROOT, FIX
 
-alerts = load("trader-alerts", "alerts")
+alerts = load("nse-alerts", "alerts")
 
-QDIR = os.path.join(FIX, "trader-alerts")
-PLAN = os.path.join(FIX, "trader-budget", "plan-tsla.json")
+QDIR = os.path.join(FIX, "nse-alerts")
+PLAN = os.path.join(FIX, "nse-budget", "plan-tsla.json")
 DT = datetime.datetime
 UA = "Mozilla/5.0 (compatible; day-trader-skill/2.0; +https://github.com/Jakeschincariol/day-trader-skill)"
 
@@ -285,7 +285,7 @@ class Rules(unittest.TestCase):
         rings, st = self.at("2026-10-19 15:55", rules)
         self.assertEqual(len(rings), 1)
         self.assertIn("Flat by close: it is 15:55 New York (set for 15:55), the market closes at 16:00", rings[0]["message"])
-        self.assertIn("trader-broker flatten --symbol TSLA", rings[0]["message"])
+        self.assertIn("nse-broker flatten --symbol TSLA", rings[0]["message"])
         self.assertEqual(self.at("2026-10-19 15:59", rules, st)[0], [])
         rings, _ = self.at("2026-10-19 16:10", rules)
         self.assertIn("the market has closed", rings[0]["message"])
@@ -305,7 +305,7 @@ class Rules(unittest.TestCase):
         self.assertEqual(st["rung"]["flat"], "2026-12-01T20:55:00Z")
 
     def test_the_example_rules_are_valid(self):
-        with open(os.path.join(ROOT, "trader-alerts", "alerts.example.json")) as fh:
+        with open(os.path.join(ROOT, "nse-alerts", "alerts.example.json")) as fh:
             rules = json.load(fh)["rules"]
         for r in rules:
             alerts.validate(r)
