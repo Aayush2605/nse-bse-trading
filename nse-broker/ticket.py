@@ -97,9 +97,10 @@ def parse_now(text):
 
 
 def ist_iso(now_utc):
-    """naive UTC -> "2026-10-19T10:15:00-04:00" (IST wall clock with its offset)."""
-    off = ist_offset(now_utc)
-    return "%s+05:30" % to_ist(now_utc).replace(microsecond=0).isoformat()
+    """naive UTC -> "2026-10-30T09:36:00+05:30" (IST wall clock with its offset)."""
+    m = int(round(ist_offset(now_utc) * 60))
+    return "%s%s%02d:%02d" % (to_ist(now_utc).replace(microsecond=0).isoformat(), "+" if m >= 0 else "-",
+                              abs(m) // 60, abs(m) % 60)
 
 
 # ---------------------------------------------------------------- files
@@ -612,7 +613,7 @@ def cmd_flatten(a):
     cfg = read_json(a.config, "config", required=False) or {}
     sym = a.symbol.strip().upper()
     now, today = _clock(a)
-    source = "the broker, get_open_position"
+    source = "the broker, get_positions"
     if a.qty is not None:
         qty = _f(a.qty)
         if qty is None or qty <= 0:
@@ -623,7 +624,7 @@ def cmd_flatten(a):
                   if str(p.get("ticker") or p.get("symbol") or "").upper() == sym)
         source = a.portfolio
         if qty <= 1e-9:
-            raise TicketError("nothing to flatten: no %s shares in %s. Check the broker (get_open_position "
+            raise TicketError("nothing to flatten: no %s shares in %s. Check the broker (get_positions "
                               "%s) and pass --qty if you do hold some" % (sym, a.portfolio, sym))
     plan = read_json(a.plan, "plan", required=False) or {}
     flat_by = (plan.get("flat_by") if str(plan.get("symbol", "")).upper() == sym else None) \
@@ -642,7 +643,7 @@ def cmd_flatten(a):
     print("Wrote it to %s%s." % (a.orders, (" (it replaced %d earlier proposal%s)"
                                              % (replaced, "" if replaced == 1 else "s")) if replaced else ""))
     if a.qty is None:
-        print("The qty comes from %s. Check it against get_open_position %s before you say yes." % (source, sym))
+        print("The qty comes from %s. Check it against get_positions %s before you say yes." % (source, sym))
     print("Next:")
     print("  1. nse-risk: check.py. A sell that only closes what you hold is never blocked by the daily")
     print("     limits or the entry window.")
@@ -850,7 +851,7 @@ def main(argv=None):
     p.add_argument("--state", default="trader/state/broker.json")
     p = sub.add_parser("flatten", help="a sell ticket that closes a symbol's position by flat_by")
     p.add_argument("--symbol", required=True)
-    p.add_argument("--qty", help="shares you hold, from get_open_position (default: trader/portfolio.json)")
+    p.add_argument("--qty", help="shares you hold, from get_positions (default: trader/portfolio.json)")
     p.add_argument("--orders", default="trader/orders.json", help="where the ticket is written")
     p.add_argument("--portfolio", default="trader/portfolio.json")
     p.add_argument("--plan", default="trader/plan.json")

@@ -169,7 +169,7 @@ def market_status(now_utc):
     nd = d if (s and local.time() < s[0]) else d + datetime.timedelta(days=1)
     for _ in range(15):
         if session(nd):
-            st["next_open"] = "%s 09:15" % nd.isoformat()
+            st["next_open"] = "%s %s" % (nd.isoformat(), OPEN.strftime("%H:%M"))
             break
         nd += datetime.timedelta(days=1)
     return st
@@ -601,7 +601,7 @@ def cmd_check(a):
             print("error: " + e)
         if rings:
             print("An alert is information, not an order. A bracket's stop-loss and take-profit already sit at "
-                  "the broker: check get_open_position and record any fill (ticket.py fill). To close a "
+                  "the broker: check get_positions and record any fill (ticket.py fill). To close a "
                   "position yourself: ticket.py flatten, then nse-risk and your yes.")
     return 0 if rings else 1
 

@@ -6,12 +6,13 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
 
+from _us_clock import us_clock
 from _load import load, ROOT, FIX
 
-ticket = load("nse-broker", "ticket")
-check = load("nse-risk", "check")
+ticket = us_clock(load("nse-broker", "ticket"))
+check = us_clock(load("nse-risk", "check"))
 
-CFG_PATH = os.path.join(ROOT, "nse-budget", "config.example.json")
+CFG_PATH = os.path.join(FIX, "nse-budget", "config-us.json")          # the US limits the TSLA fixtures need
 ORDERS_PATH = os.path.join(FIX, "nse-risk", "orders-tsla.json")
 PLAN_PATH = os.path.join(FIX, "nse-budget", "plan-tsla.json")
 NOW = "2026-10-19 10:15"
@@ -20,8 +21,10 @@ AAPL = {"symbol": "AAPL", "side": "buy", "notional": "1250", "type": "market", "
 BATCH = ["AAPL", "AXP", "GOOGL", "KO", "BAC"]
 TSLA_CALL = {"symbol": "TSLA", "side": "buy", "qty": "8", "type": "market", "time_in_force": "day",
              "order_class": "bracket", "take_profit_limit_price": "370.04", "stop_loss_stop_price": "358.32"}
+KITE_ENTRY = {"variety": "regular", "exchange": "NSE", "tradingsymbol": "TSLA", "quantity": 8, "product": "MIS",
+              "validity": "DAY", "transaction_type": "BUY", "order_type": "MARKET"}
 TSLA_PLAIN = ("BUY 8 TSLA, market, good for today / stop-loss 358.32 / take-profit 370.04 / max loss about "
-              "$46.88 if the stop fills at 358.32 (it can fill worse in a fast market)")
+              "₹46.88 if the stop fills at 358.32 (it can fill worse in a fast market)")
 
 
 def tsla(**over):
@@ -43,7 +46,7 @@ class ExplicitYes(unittest.TestCase):
         return ticket.parse_yes(reply, order, batch)[0]
 
     def test_plain_yes_counts(self):
-        for r in ("yes", "Yes.", "YES", "y", "yes place it", "Yes, buy it", "yes AAPL", "yes $1,250 of AAPL",
+        for r in ("yes", "Yes.", "YES", "y", "yes place it", "Yes, buy it", "yes AAPL", "yes ₹1,250 of AAPL",
                   "yes 1250"):
             self.assertTrue(self.yes(r), r)
 
@@ -81,10 +84,10 @@ class TicketShape(unittest.TestCase):
         self.assertEqual(ticket.fingerprint(tsla()), ticket.fingerprint(TSLA_CALL))
 
     def test_plain_english(self):
-        self.assertEqual(ticket.plain(AAPL), "BUY $1,250 of AAPL, market order, good for today")
+        self.assertEqual(ticket.plain(AAPL), "BUY ₹1,250 of AAPL, market order, good for today")
         self.assertEqual(ticket.plain({"symbol": "KO", "side": "sell", "qty": "1", "type": "limit",
                                        "limit_price": "95", "time_in_force": "gtc"}),
-                         "SELL 1 share of KO, limit order at $95, good until canceled")
+                         "SELL 1 share of KO, limit order at ₹95, good until canceled")
         self.assertEqual(ticket.plain(tsla()), TSLA_PLAIN)
         lim = tsla(type="limit", limit_price="364.00")
         self.assertEqual(ticket.plain(lim).split(" / ")[0], "BUY 8 TSLA, limit 364.00, good for today")
@@ -94,13 +97,11 @@ class TicketShape(unittest.TestCase):
 
 
 class DesktopConfig(unittest.TestCase):
-    def test_example_is_paper_with_placeholder_keys(self):
+    def test_example_is_zerodha_kite_with_no_keys(self):
         with open(os.path.join(ROOT, "nse-broker", "claude_desktop_config.example.json")) as fh:
-            server = json.load(fh)["mcpServers"]["alpaca"]
-        self.assertEqual((server["command"], server["args"]), ("uvx", ["alpaca-mcp-server"]))
-        self.assertEqual(server["env"]["ALPACA_PAPER_TRADE"], "true")
-        for k in ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"):
-            self.assertIn("NEVER_IN_CHAT", server["env"][k])
+            server = json.load(fh)["mcpServers"]["kite"]
+        self.assertEqual((server["command"], server["args"]), ("npx", ["mcp-remote", "https://mcp.kite.trade/mcp"]))
+        self.assertNotIn("env", server)                                   # nothing secret in the example
 
 
 class Flow(unittest.TestCase):
@@ -127,6 +128,13 @@ class Flow(unittest.TestCase):
             return check.main(["--orders", self.orders, "--config", self.cfg, "--portfolio", self.pf,
                                "--prices", self.none, "--state", self.state, "--now", now, "--out", self.risk])
 
+    def go_live(self):
+        with open(self.cfg) as fh:
+            c = json.load(fh)
+        c["paper"] = False
+        with open(self.cfg, "w") as fh:
+            json.dump(c, fh)
+
     def state_doc(self):
         with open(self.state) as fh:
             return json.load(fh)
@@ -141,15 +149,16 @@ class Flow(unittest.TestCase):
         self.assertIn("not ready", err)
 
     def test_the_full_two_yes_flow(self):
+        self.go_live()
         self.assertEqual(self.run_risk(), 0)
         code, text, _ = run(self.args("show", "--index", "1"))
         self.assertEqual(code, 0)
-        self.assertIn("ORDER 1 of 1, PAPER account, Alpaca", text)
+        self.assertIn("ORDER 1 of 1, LIVE ZERODHA ACCOUNT, REAL MONEY", text)
         for part in TSLA_PLAIN.split(" / "):
             self.assertIn("  " + part + "\n", text)
         self.assertIn("READY: nse-risk PASS", text)
-        self.assertIn('"order_class": "bracket"', text)
-        self.assertIn('"stop_loss_stop_price": "358.32"', text)
+        self.assertIn('"product": "MIS"', text)
+        self.assertIn('"order_type": "SL-M", "trigger_price": 358.32', text)
         self.assertNotIn('"plan"', text)
         self.assertNotIn('"why"', text)
         self.assertIn("Allow once", text)
@@ -161,8 +170,9 @@ class Flow(unittest.TestCase):
 
         code, text, _ = run(self.args("approve", "--index", "1", "--reply", "yes"))
         self.assertEqual(code, 0)
-        self.assertIn("place_stock_order", text)
-        self.assertEqual(json.loads(text[text.index("{"):text.rindex("}") + 1]), TSLA_CALL)
+        self.assertIn("Kite place_order (now):", text)
+        first = text[text.index("{"):text.index("}") + 1]
+        self.assertEqual(json.loads(first), KITE_ENTRY)
         code, _, err = run(self.args("approve", "--index", "1", "--reply", "yes"))
         self.assertEqual(code, 1)
         self.assertIn("APPROVED", err)
@@ -186,9 +196,9 @@ class Flow(unittest.TestCase):
         self.assertIn("DONE: placed", text)
         code, text, _ = run(["log", "--state", self.state, "--now", NOW])
         self.assertIn("1 placed today", text)
-        self.assertIn("max loss $46.88", text)
+        self.assertIn("max loss ₹46.88", text)
 
-        # nse-risk now counts it: a second TSLA buy today is a duplicate, and $46.88 is used
+        # nse-risk now counts it: a second TSLA buy today is a duplicate, and ₹46.88 is used
         res = check.check([tsla()], {"budget": 5000}, state=st, now=check.parse_now("2026-10-19 10:30"))
         self.assertIn("already placed today", " ".join(res["results"][0]["reasons"]))
         self.assertEqual((res["today"]["entries_placed"], res["today"]["loss_at_risk"]), (1, 46.88))
@@ -202,9 +212,9 @@ class Flow(unittest.TestCase):
         code, text, _ = run(["flatten", "--symbol", "TSLA", "--orders", self.orders, "--portfolio", self.pf,
                              "--plan", PLAN_PATH, "--config", self.cfg, "--now", late])
         self.assertEqual(code, 0)
-        self.assertIn("SELL 8 shares of TSLA, market order, good for today (flat by 15:55 New York)", text)
+        self.assertIn("SELL 8 shares of TSLA, market order, good for today (flat by 15:55 IST)", text)
         self.assertIn("replaced 1 earlier proposal", text)
-        self.assertIn("cancel_order_by_id", text)
+        self.assertIn("cancel_order", text)
         with open(self.orders) as fh:
             doc = json.load(fh)
         self.assertEqual(ticket.tool_input(doc["orders"][0]),
@@ -232,7 +242,7 @@ class Flow(unittest.TestCase):
         code, text, _ = run(["flatten", "--symbol", "tsla", "--qty", "8", "--orders", self.orders,
                              "--portfolio", self.none, "--plan", self.none, "--config", self.cfg, "--now", NOW])
         self.assertEqual(code, 0)
-        self.assertNotIn("Check it against get_open_position", text)
+        self.assertNotIn("Check it against get_positions", text)
         self.assertEqual(run(["flatten", "--symbol", "TSLA", "--qty", "0", "--orders", self.orders])[0], 1)
 
     def test_an_edited_order_is_not_ready(self):
@@ -268,17 +278,21 @@ class Flow(unittest.TestCase):
         code, text, _ = run(self.args("show", "--index", "1"))
         self.assertIn("DONE: declined", text)
 
-    def test_ibkr_tickets_send_the_final_yes_to_ibkr(self):
-        with open(self.cfg) as fh:
-            c = json.load(fh)
-        c["broker"] = "ibkr"
-        with open(self.cfg, "w") as fh:
-            json.dump(c, fh)
+    def test_paper_flow_fills_here_and_checks_the_stop_and_target(self):
         self.run_risk()
         code, text, _ = run(self.args("show", "--index", "1"))
-        self.assertIn("Interactive Brokers", text)
-        self.assertIn("after you approve it there", text)
-        self.assertNotIn("place_stock_order", text)
+        self.assertIn("PAPER (simulated here, nothing goes to Zerodha)", text)
+        code, text, _ = run(self.args("approve", "--index", "1", "--reply", "yes"))
+        self.assertIn("ticket.py paper --index 1", text)
+        code, text, _ = run(self.args("paper", "--index", "1", "--price", "364.18", "--portfolio", self.pf))
+        self.assertEqual(code, 0)
+        self.assertIn("PAPER fill: BUY 8 TSLA at 364.18", text)
+        trade = self.state_doc()["paper_open"][0]
+        self.assertEqual((trade["stop"], trade["target"], trade["flat_by"]), (358.32, 370.04, "15:55"))
+        bars = os.path.join(FIX, "nse-entry", "TSLA-2026-10-19-5m.json")
+        code, text, _ = run(["paper-check", "--state", self.state, "--config", self.cfg, "--portfolio", self.pf,
+                             "--offline", bars, "--now", "2026-10-19 10:50"])
+        self.assertIn("TSLA: still open", text)                              # no stop or target by 10:49
 
     def test_fill_sell_relieves_the_oldest_lot(self):
         pf = {"cash": 0, "positions": [{"ticker": "KO", "shares": 3, "lots": [

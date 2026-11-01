@@ -204,7 +204,7 @@ def next_open(d):
     nd = d + datetime.timedelta(days=1)
     for _ in range(15):
         if session(nd):
-            return "%s 09:15" % nd.isoformat()
+            return "%s %s" % (nd.isoformat(), OPEN.strftime("%H:%M"))
         nd += datetime.timedelta(days=1)
     return None
 

@@ -110,7 +110,7 @@ holiday list is unknown.
    rules and rings each alert once. A check reads the latest delayed quote;
    it is not a live feed, and a price can pass a level between two checks.
 3. Tell the user what rang in one line each. A stop or target alert means the
-   bracket order has probably filled: check `get_open_position` and record the
+   bracket order has probably filled: check `get_positions` and record the
    fill with nse-broker. "Flat by close" means close anything still open:
    nse-broker `flatten`, then nse-risk, then the user's yes. Never act
    for them.
@@ -154,7 +154,8 @@ live, and never predicts where a price is going.
 - Paper trading by default (`"paper": true`). Going live is the user's own decision, in their own config.
 - Nothing in this pack places an order except nse-broker, and only when all three hold: nse-risk
   passed that exact order today, the user typed an explicit yes for that one order in the chat, and the
-  user clicked Allow once on Claude's own card because the order tool is set to "Needs approval"
+  user clicked Allow once on Claude's own card (live; paper fills are simulated here) because the
+  order tool is set to "Needs approval"
   (Customize > Connectors > tool permissions). Never set an order tool to "Always allow".
 - No options, margin, short selling or leverage unless the config allows it and the user confirms.
 - Broker keys live in environment variables or the Claude Desktop config, never in the chat.

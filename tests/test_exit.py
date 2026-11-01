@@ -10,10 +10,11 @@ import unittest
 from contextlib import redirect_stdout, redirect_stderr
 from decimal import Decimal
 
+from _us_clock import us_clock
 from _load import load, FIX, ROOT
 
-exitp = load("nse-exit", "exit")
-entry = load("nse-entry", "entry")
+exitp = us_clock(load("nse-exit", "exit"))
+entry = us_clock(load("nse-entry", "entry"))
 
 TSLA = os.path.join(FIX, "nse-entry", "TSLA-2026-10-19-5m.json")
 
@@ -23,7 +24,7 @@ REEL_PLAN = {"created_by": "nse-exit", "symbol": "TSLA", "side": "buy", "date": 
              "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
              "stop": 358.32, "stop_rule": "or_mid", "stop_label": "opening-range midpoint",
              "target": 370.04, "target_r": 1.0, "target_label": "1R (one times the risk)",
-             "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:15"}
+             "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:55"}
 REEL_ENTRY = {"created_by": "nse-entry", "symbol": "TSLA", "setup": "orb", "side": "buy", "date": "2026-10-19",
               "status": "triggered", "time": "10:15 AM", "bar_start": "10:10", "bar_index": 8, "price": 364.18,
               "level": 362.18, "interval": "5m", "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
@@ -92,7 +93,7 @@ class Math(unittest.TestCase):
             with self.assertRaises(exitp.PlanError) as cm:
                 c(364.18, stop, target)
             self.assertIn(why, str(cm.exception), stop)
-        # 0.05% of 364.18 is 0.182: a $0.19 risk is allowed, $0.18 is not
+        # 0.05% of 364.18 is 0.182: a ₹0.19 risk is allowed, ₹0.18 is not
         self.assertEqual(c(364.18, "price:363.99")["risk"], Decimal("0.19"))
         with self.assertRaises(exitp.PlanError):
             c(364.18, "price:364.00")
@@ -163,9 +164,9 @@ class Cli(unittest.TestCase):
         p = self.read_plan()
         for k, v in REEL_PLAN.items():
             self.assertEqual(p[k], v, k)
-        self.assertIn("Stop          $358.32  opening-range midpoint", text)
-        self.assertIn("Target        $370.04  1R (one times the risk)", text)
-        self.assertIn("Risk a share  $5.86 (1.61% of the entry)", text)
+        self.assertIn("Stop          ₹358.32  opening-range midpoint", text)
+        self.assertIn("Target        ₹370.04  1R (one times the risk)", text)
+        self.assertIn("Risk a share  ₹5.86 (1.61% of the entry)", text)
         self.assertIn("Reward:risk   1.0", text)
         self.assertIn("Flat by       15:55", text)
         self.assertIn("not a guarantee", text)
@@ -176,7 +177,7 @@ class Cli(unittest.TestCase):
         self.assertEqual(self.read_plan()["target_r"], 2.0)
         code, text, _ = run(exitp, ["show", "--now", "2026-10-19 10:20"])
         self.assertEqual(code, 0)
-        self.assertIn("$375.90", text)
+        self.assertIn("₹375.90", text)
         self.assertNotIn("not today", text)
         code, text, _ = run(exitp, ["show", "--now", "2026-10-20 10:20"])
         self.assertIn("not today", text)
@@ -250,7 +251,7 @@ class Cli(unittest.TestCase):
         self.write(os.path.join("trader", "entry.json"), half)
         code, text, _ = run(exitp, ["plan", "--now", "2026-11-27 10:16"])
         self.assertEqual(code, 0)
-        self.assertIn("Flat by       12:55 ET", text)
+        self.assertIn("Flat by       12:55 IST", text)
         self.assertIn("early close", text)
         code, _, err = run(exitp, ["plan", "--now", "2026-11-27 10:16", "--flat-by", "14:00"])
         self.assertEqual(code, 1)
@@ -280,7 +281,7 @@ class SkillDoc(unittest.TestCase):
         self.assertGreater(len(text.splitlines()), 60)
         self.assertEqual(text[text.index("## Safety"):], risk[risk.index("## Safety"):])
         low = " ".join(text.lower().split())
-        for must in ("before the entry", "a stop is a plan, not a guarantee", "day trading loses most people money", "/nse-timemachine", "/nse-budget", "longs only", "$358.32", "$370.04", "$5.86", "375.90", "too tight to survive the spread"):
+        for must in ("before the entry", "a stop is a plan, not a guarantee", "day trading loses most people money", "/nse-timemachine", "/nse-budget", "longs only", "₹1,387.15", "₹1,401.85", "₹7.35", "1409.20", "too tight to survive the spread"):
             self.assertIn(must, low)
         for never in ("\u2014", "tick " + "by tick", "real " + "time", "pro" + "fit"):
             self.assertNotIn(never, low)

@@ -8,15 +8,16 @@ import unittest
 import urllib.error
 from contextlib import redirect_stdout, redirect_stderr
 
+from _us_clock import us_clock
 from _load import load, FIX
 
-scan = load("nse-scanner", "scan")
+scan = us_clock(load("nse-scanner", "scan"))
 
 SDIR = os.path.join(FIX, "nse-scanner")
 WALL = os.path.join(SDIR, "wall5m-2026-10-19.json.gz")       # 234 real 5-min charts, Oct 19 2026
 DAILY = os.path.join(SDIR, "daily-spark-2026-10-19.json")    # 19 real daily charts as one spark answer
 LIVE = os.path.join(SDIR, "spark-3mo-live-2026-10-20.json")  # a real 20-symbol spark answer
-SYMDIR = os.path.join(SDIR, "symdir")                        # trimmed Nasdaq Trader files of Oct 19
+INDIA = os.path.join(FIX, "india")                             # NSE + BSE listing cuts (test_india.py)
 SPARK5 = os.path.join(SDIR, "spark-5m-live-2026-10-20-1001.json")  # real, fetched 10:01:47 AM ET Oct 20
 TSLA5 = os.path.join(SDIR, "TSLA-5m-live-2026-10-20-1001.json")    # real v8, fetched with it
 DT = datetime.datetime
@@ -50,66 +51,6 @@ def bars_series(day, closes, highs=None, lows=None, start="09:30", extra=None):
             s[k].append(c)
         s["v"].append(10)
     return s
-
-
-class Universe(unittest.TestCase):
-    def setUp(self):
-        texts = {}
-        for f in scan.NASDAQ_FILES:
-            with open(os.path.join(SYMDIR, f), encoding="utf-8") as fh:
-                texts[f] = fh.read()
-        self.kept, self.counts, self.created = scan.build_universe(texts)
-        self.rows = {}
-        for f in scan.NASDAQ_FILES:
-            rows, _ = scan.parse_symdir(texts[f])
-            for r in rows:
-                self.rows[(r.get("Symbol") or r.get("ACT Symbol"))] = r
-
-    def why(self, sym):
-        return scan.classify(self.rows[sym])
-
-    def test_the_kept_list(self):
-        self.assertEqual([s for s, _ in self.kept],
-                         ["A", "AACG", "AACI", "AAPL", "AME", "AMX", "ARLP", "BEP", "BF.B", "BRK.B", "IRS",
-                          "KO", "OBAI", "ORGO", "PFBC", "PRT", "TSLA"])
-        self.assertEqual(self.counts["rows"], 36)
-        self.assertEqual(self.created, "2026-10-19 10:01")
-        self.assertEqual(dict(self.kept)["TSLA"], "Tesla, Inc. - Common Stock")
-
-    def test_one_case_per_rule(self):
-        cases = {
-            "ZAZZT": "test issue", "ZZZTX": "test issue",           # 1. test issues
-            "AAAP": "ETF", "SPY": "ETF",                            # 1. ETFs
-            "ABR$D": "not a plain ticker",                          # 2. $ preferred
-            "AAC.U": "unit / warrant / right suffix",               # 2. .U unit
-            "AAC.W": "unit / warrant / right suffix",               # 2. .W warrant
-            "AACIW": "warrant",                                     # 3. warrants
-            "HAVAR": "unit or right",                               # 3. SPAC rights "Rights that convert..."
-            "ATMP": "note",                                         # 3. an ETN with the ETF flag at N
-            "GJH": "coupon", "EAI": "coupon",                       # 3. a % coupon (bonds too)
-            "CDZIP": "depositary",                                  # 3. depositary shares that carry a preferred
-            "AACIU": "unit", "ARCIU": "unit",                       # 5. "- Units", "- Unit"
-            "AACPR": "right", "GENVR": "right",                     # 5. rights, contingent value rights
-            "BHK": "bond",                                          # 5. a bond fund with no share wording
-            "CHTRP": "preferred",                                   # 5. preferred stock
-            "AAPL": "keep", "AACI": "keep", "AACG": "keep",         # 4. common, ordinary, ADS
-            "PFBC": "keep", "OBAI": "keep",                         # 4. "Preferred Bank", "Our Bond": common stock
-            "AMX": "keep", "IRS": "keep",                           # 4. ADS "the right to receive", Global depositary
-            "ARLP": "keep", "BEP": "keep", "PRT": "keep",           # 4. partnership and trust units
-            "BRK.B": "keep", "BF.B": "keep",                        # 2. one class letter after a dot
-            "AME": "keep", "ORGO": "keep",                          # 6. plain names
-        }
-        for sym, want in cases.items():
-            self.assertEqual(self.why(sym), want, sym)
-
-    def test_nextshares_rule(self):
-        row = {"Symbol": "ZXYZ", "Security Name": "Some Fund - NextShares", "Test Issue": "N",
-               "ETF": "N", "NextShares": "Y"}
-        self.assertEqual(scan.classify(row), "NextShares")
-
-    def test_not_a_symbol_file(self):
-        with self.assertRaises(scan.ScanError):
-            scan.parse_symdir("<html>maintenance</html>")
 
 
 class Time(unittest.TestCase):
@@ -285,7 +226,7 @@ class Daily(unittest.TestCase):
         # meta is Yahoo's as of 10:50 AM Monday, so the volume is the day's so far
         hits, counts, _ = scan.scan_daily(self.data, self.syms, scan.parse_now("2026-10-19 10:50"), 5, 1000000)
         self.assertEqual(sorted(h["symbol"] for h in hits), ["BAC", "CCL", "F", "JPM", "KO", "RIVN", "XOM"])
-        self.assertEqual(counts["illiquid"], 8)     # PLUG under $5; BLK, CI, HD, RCL, GE, MS, PNC under 1M so far
+        self.assertEqual(counts["illiquid"], 8)     # PLUG under ₹5; BLK, CI, HD, RCL, GE, MS, PNC under 1M so far
         self.assertEqual(counts["scanned"], 11)
 
     def test_short_and_empty_charts(self):
@@ -335,7 +276,7 @@ class Orb(unittest.TestCase):
 
     def test_price_floor(self):
         hits, counts, _ = self.scan_at("2026-10-19 10:15", min_price=5)
-        self.assertEqual(len(hits), 41)                    # AMC at $2.97 drops out
+        self.assertEqual(len(hits), 41)                    # AMC at ₹2.97 drops out
         self.assertEqual(counts["illiquid"], 9)
         self.assertNotIn("AMC", [h["symbol"] for h in hits])
 
@@ -455,7 +396,7 @@ class LiveFiveMinute(unittest.TestCase):
         self.assertEqual(hits, [{"symbol": "TSLA", "setups": ["orb"], "price": 370.58, "at": "10:00 AM",
                                  "bar_start": "09:55", "bar_index": 5, "or_high": 370.49, "or_low": 363.64,
                                  "pct_over": 0.03}])
-        self.assertEqual(counts["illiquid"], 1)            # AMC under the $5 floor
+        self.assertEqual(counts["illiquid"], 1)            # AMC under the ₹5 floor
 
     def test_stage_two_cap_takes_the_most_traded(self):
         data, _ = scan.load_offline(WALL)
@@ -491,13 +432,16 @@ class Cli(unittest.TestCase):
 
     def test_universe_daily_orb_end_to_end(self):
         uni = os.path.join(self.t, "universe.txt")
-        code, text, _ = run(["universe", "--offline", SYMDIR, "--out", uni])
+        code, text, _ = run(["universe", "--offline", INDIA, "--out", uni])
         self.assertEqual(code, 0)
-        self.assertIn("Kept 17 US-listed", text)
+        self.assertIn("Kept 15 listed stocks (each once)", text)
         with open(uni, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
-        self.assertEqual(len(lines), 17)
-        self.assertIn("BRK.B|Berkshire Hathaway Inc. New Common Stock", lines)
+        self.assertIn("RELIANCE|Reliance Industries Limited|NSE EQ", lines)
+
+        # the daily scan reads a universe file; the fixture charts are US (KO, TSLA) among 15 others
+        with open(uni, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(["KO|Coca-Cola", "TSLA|Tesla"] + ["X%02d|none" % i for i in range(15)]) + "\n")
 
         # daily over that universe with the fixture charts: only KO and TSLA are in both, so partial
         code, text, _ = run(["daily", "--universe", uni, "--offline", DAILY, "--now", "2026-10-19 09:00",
@@ -515,13 +459,13 @@ class Cli(unittest.TestCase):
                              "--out", self.wl])
         self.assertEqual(code, 0)
         self.assertIn("42 of 231 charts closed above their opening-range high by 10:15 AM", text)
-        self.assertIn("10:15 AM  TSLA      $364.18  range 354.47 to 362.18  +0.55% over", text)
+        self.assertIn("10:15 AM  TSLA      ₹364.18  range 354.47 to 362.18  +0.55% over", text)
         self.assertIn("not a list of stocks to buy", text)
         doc = self.read(self.wl)
         self.assertEqual({k: doc[k] for k in ("created_by", "created_at", "mode", "as_of", "universe", "scanned",
                                               "source")},
                          {"created_by": "nse-scanner", "created_at": "2026-10-19T14:15:00Z", "mode": "orb",
-                          "as_of": "2026-10-19 10:15 ET", "universe": 234, "scanned": 231, "source": "yahoo"})
+                          "as_of": "2026-10-19 10:15 IST", "universe": 234, "scanned": 231, "source": "yahoo"})
         self.assertEqual(len(doc["hits"]), 42)
         self.assertIn({"symbol": "TSLA", "setups": ["orb"], "price": 364.18, "at": "10:15 AM", "bar_start": "10:10",
                        "bar_index": 8, "or_high": 362.18, "or_low": 354.47, "pct_over": 0.55}, doc["hits"])

@@ -20,9 +20,10 @@ import unittest
 import urllib.error
 from contextlib import redirect_stdout, redirect_stderr
 
+from _us_clock import us_clock
 from _load import load, FIX, ROOT
 
-entry = load("nse-entry", "entry")
+entry = us_clock(load("nse-entry", "entry"))
 
 EDIR = os.path.join(FIX, "nse-entry")
 TSLA = os.path.join(EDIR, "TSLA-2026-10-19-5m.json")
@@ -102,7 +103,7 @@ class TheReel(unittest.TestCase):
         self.assertEqual(r["last"]["bar_start"], "10:05")
         self.assertEqual(r["last"]["close"], 361.68)
         self.assertEqual(r["forming"]["bar_start"], "10:10")
-        self.assertIn("$0.50 under the range high $362.18", r["reason"])
+        self.assertIn("₹0.50 under the range high ₹362.18", r["reason"])
         self.assertEqual(at("2026-10-19 10:14:59")["status"], "waiting")
 
     def test_before_the_open_and_while_the_range_forms(self):
@@ -209,7 +210,7 @@ class Rules(unittest.TestCase):
             entry.parse_hhmm("25:00", "x")
         self.assertEqual(entry.parse_now("2026-10-19 10:15"), DT(2026, 10, 19, 14, 15))
         self.assertEqual(entry.parse_now("2026-10-19T14:15:00Z"), DT(2026, 10, 19, 14, 15))
-        self.assertEqual(entry.parse_now("2026-10-19 10:15 ET"), DT(2026, 10, 19, 14, 15))
+        self.assertEqual(entry.parse_now("2026-10-19 10:15 IST"), DT(2026, 10, 19, 14, 15))
 
     def test_or_minutes_30(self):
         r = at("2026-10-19 10:49", or_minutes=30)
@@ -418,8 +419,8 @@ class Watch(unittest.TestCase):
         # it looked at 10:07 (10:05 bar spiking to 363 in progress) and at 10:10:02 (that bar closed 361.68)
         self.assertEqual([entry.to_ist(c).strftime("%H:%M:%S") for c in calls], ["10:07:00", "10:10:02", "10:15:02"])
         text = "\n".join(lines)
-        self.assertIn("10:05 bar  closed $361.68  $0.50 under $362.18", text)
-        self.assertIn("10:10 bar  closed $364.18  TRIGGERED", text)
+        self.assertIn("10:05 bar  closed ₹361.68  ₹0.50 under ₹362.18", text)
+        self.assertIn("10:10 bar  closed ₹364.18  TRIGGERED", text)
         self.assertEqual(text.count("TRIGGERED"), 1)
 
     def test_waits_for_yahoo_to_catch_up(self):
@@ -437,7 +438,7 @@ class Watch(unittest.TestCase):
         self.assertEqual(code, 0)
         text = "\n".join(lines)
         self.assertIn("not open yet", lines[0])
-        self.assertIn(" 9:40 bar  closed $360.39  opening range set: high $362.18, low $354.47", text)
+        self.assertIn(" 9:40 bar  closed ₹360.39  opening range set: high ₹362.18, low ₹354.47", text)
         self.assertEqual(sum(1 for x in lines if " bar  closed " in x), 9)    # 9:30 ... 10:10, one line each
 
     def test_a_computer_that_dozes_off_catches_up_when_it_wakes(self):
@@ -498,7 +499,7 @@ class Cli(unittest.TestCase):
     def test_check_write_is_the_contract_shape(self):
         code, text, _ = run(["check", "TSLA", "--offline", TSLA, "--now", "2026-10-19 10:15", "--write"])
         self.assertEqual(code, 0)
-        self.assertIn("TRIGGERED 10:15 AM at $364.18", text)
+        self.assertIn("TRIGGERED 10:15 AM at ₹364.18", text)
         self.assertIn("/nse-exit", text)
         with open(os.path.join("trader", "entry.json")) as fh:
             e = json.load(fh)
@@ -554,7 +555,7 @@ class Cli(unittest.TestCase):
     def test_watch_replays_the_file_and_writes_the_entry(self):
         code, text, _ = run(["watch", "TSLA", "--offline", TSLA, "--now", "2026-10-19 09:50", "--every", "30"])
         self.assertEqual(code, 0)
-        self.assertIn("10:10 bar  closed $364.18  TRIGGERED", text)
+        self.assertIn("10:10 bar  closed ₹364.18  TRIGGERED", text)
         with open(os.path.join("trader", "entry.json")) as fh:
             self.assertEqual(json.load(fh)["bar_index"], 8)
         code, text, _ = run(["watch", "TSLA", "--offline", TSLA, "--now", "2026-10-19 09:50", "--until", "10:00",
@@ -574,7 +575,7 @@ class Cli(unittest.TestCase):
         code, text, _ = run(["watchlist", "--offline", "charts", "--now", "2026-10-19 10:15"])
         self.assertEqual(code, 0)
         rows = text.splitlines()
-        self.assertTrue(rows[1].startswith("TSLA    triggered  10:15 AM  $364.18   $362.18"), rows[1])
+        self.assertTrue(rows[1].startswith("TSLA    triggered  10:15 AM  ₹364.18   ₹362.18"), rows[1])
         self.assertIn("ZZZZ    error: no offline file", rows[2])
         self.assertIn("DEMO    error: DEMO has 1m bars", rows[3])
         self.assertIn("1 of 3 triggered", text)
@@ -595,7 +596,7 @@ class SkillDoc(unittest.TestCase):
         self.assertGreater(len(text.splitlines()), 60)
         self.assertEqual(text[text.index("## Safety"):], risk[risk.index("## Safety"):])
         low = " ".join(text.lower().split())
-        for must in ("bar by bar", "can lag", "day trading loses most people money", "/nse-exit", "longs only", "in the background", "/loop", "nothing was placed", "10:15 am", "$364.18", "bar 8"):
+        for must in ("bar by bar", "can lag", "day trading loses most people money", "/nse-exit", "longs only", "in the background", "/loop", "nothing was placed", "9:35 am", "₹1394.50", "bar 3"):
             self.assertIn(must, low)
         for never in ("\u2014", "tick " + "by tick", "real " + "time", "pro" + "fit"):
             self.assertNotIn(never, low)

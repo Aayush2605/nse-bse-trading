@@ -5,11 +5,13 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
 
+from _us_clock import us_clock
 from _load import load, ROOT, FIX
 
-size = load("nse-budget", "size")
+size = us_clock(load("nse-budget", "size"))
 
-CFG = os.path.join(ROOT, "nse-budget", "config.example.json")
+EXAMPLE = os.path.join(ROOT, "nse-budget", "config.example.json")
+CFG = os.path.join(FIX, "nse-budget", "config-us.json")          # the US limits the TSLA fixtures need
 PLAN = os.path.join(FIX, "nse-budget", "plan-tsla.json")
 TARGETS = os.path.join(ROOT, "nse-budget", "targets.example.json")
 TOP5 = os.path.join(FIX, "nse-budget", "berkshire-q2-2026-top5.json")
@@ -17,24 +19,28 @@ NOW = "2026-10-19 10:15"
 TODAY = "2026-10-19"
 REEL_V1 = {"AAPL": 1250, "AXP": 1119, "GOOGL": 823, "KO": 708, "BAC": 600}
 PRICES = {"AAPL": 341.27, "AXP": 309.84, "GOOGL": 353.78, "KO": 90.11, "BAC": 53.96}
-# the contract's v2 config, key for key
+# the US pack's v2 config, key for key: the TSLA fixtures are sized against it
 CONTRACT_CFG = {
     "budget": 5000, "cash_buffer_pct": 10, "max_position_pct": 75, "max_order_usd": 4000, "min_order_usd": 5,
     "max_loss_per_trade_usd": 50, "max_daily_loss_usd": 150, "max_trades_per_day": 3, "max_orders_per_day": 10,
     "min_reward_risk": 1.0, "require_stop": True,
-    "no_entries_before": "09:30", "no_entries_after": "14:45", "flat_by": "15:15",
+    "no_entries_before": "09:45", "no_entries_after": "15:30", "flat_by": "15:55",
     "fractional": False, "broker": "alpaca", "paper": True, "blocked": [],
     "allow_options": False, "allow_margin": False, "allow_short": False, "pdt_guard": False,
     "sec_user_agent": "Your Name you@example.com",
 }
+# this pack's config.example.json: rupee limits, Zerodha, Indian charges
+INDIA_CFG = dict(CONTRACT_CFG, budget=50000, max_order_usd=40000, min_order_usd=500, max_loss_per_trade_usd=500,
+                 max_daily_loss_usd=1500, no_entries_before="09:30", no_entries_after="14:45", flat_by="15:15",
+                 broker="zerodha", brokerage_per_order=20, brokerage_pct=0.03)
+del INDIA_CFG["sec_user_agent"]
 # v1's rules, for the weights mode tests
 V1 = {"budget": 5000, "cash_buffer_pct": 10, "max_position_pct": 25, "max_order_usd": 2000, "min_order_usd": 5,
       "fractional": True, "paper": True, "blocked": []}
 
 
 def cfg(**over):
-    with open(CFG) as fh:
-        c = json.load(fh)
+    c = dict(CONTRACT_CFG)
     c.update(over)
     return c
 
@@ -74,9 +80,11 @@ def prices_doc(price, quote_time="2026-10-19T14:52:13Z"):
 
 
 class TheReel(unittest.TestCase):
-    """$5,000, 10% buffer, $50 max loss, TSLA risk 5.86 -> 8 shares, $2,913.44, max loss $46.88."""
+    """₹5,000, 10% buffer, ₹50 max loss, TSLA risk 5.86 -> 8 shares, ₹2,913.44, max loss ₹46.88."""
 
     def test_config_example_is_the_contract(self):
+        with open(EXAMPLE) as fh:
+            self.assertEqual(json.load(fh), INDIA_CFG)
         with open(CFG) as fh:
             self.assertEqual(json.load(fh), CONTRACT_CFG)
 
@@ -101,9 +109,10 @@ class TheReel(unittest.TestCase):
             "symbol": "TSLA", "side": "buy", "qty": "8", "type": "market", "time_in_force": "day",
             "order_class": "bracket", "take_profit_limit_price": "370.04", "stop_loss_stop_price": "358.32",
             "plan": {"entry": 364.18, "stop": 358.32, "target": 370.04, "risk_per_share": 5.86,
-                     "max_loss": 46.88, "setup": "orb", "entry_time": "10:15 AM", "flat_by": "15:15"}})
-        self.assertIn("bound by your $50 max loss", why)
-        self.assertIn("$46.88", why)
+                     "max_loss": 46.88, "net_loss": 46.88, "net_profit": 46.88, "charges_at_stop": 0.0,
+                     "setup": "orb", "entry_time": "10:15 AM", "flat_by": "15:55"}})
+        self.assertIn("bound by your ₹50 max loss", why)
+        self.assertIn("₹46.88", why)
 
     def test_the_fixture_orders_file_is_what_it_writes(self):
         with open(os.path.join(FIX, "nse-risk", "orders-tsla.json")) as fh:
@@ -123,8 +132,8 @@ class TheReel(unittest.TestCase):
             code, text, _ = run(["--plan", PLAN, "--config", CFG, "--portfolio", os.path.join(d, "none"),
                                  "--now", NOW, "--write", out])
             self.assertEqual(code, 0)
-            self.assertIn("Size: 8 shares of TSLA = $2,913.44 at 364.18", text)
-            self.assertIn("8 x 5.86 = $46.88", text)
+            self.assertIn("Size: 8 shares of TSLA = ₹2,913.44 at 364.18", text)
+            self.assertIn("8 x 5.86 = ₹46.88", text)
             self.assertIn("<- binds", text)
             self.assertIn("not financial advice", text)
             with open(out) as fh:
@@ -148,7 +157,7 @@ class PlanRules(unittest.TestCase):
     def test_zero_shares_is_a_plain_refusal(self):
         s = size.size_trade(plan(stop=300.0), cfg(), today=TODAY)
         self.assertEqual(s["qty"], 0)
-        self.assertIn("more than your $50 max loss per trade", s["refusal"])
+        self.assertIn("more than your ₹50 max loss per trade", s["refusal"])
         self.assertIsNone(size.bracket_order(s))
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "plan.json")
@@ -227,7 +236,7 @@ class PlanRules(unittest.TestCase):
         cheap = plan(symbol="ABC", entry=4.0, stop=3.0, target=5.0)
         s = size.size_trade(cheap, cfg(max_loss_per_trade_usd=1), today=TODAY)
         self.assertEqual(s["qty"], 1)
-        self.assertIn("under your $5 minimum order", s["refusal"])
+        self.assertIn("under your ₹5 minimum order", s["refusal"])
         self.assertIsNone(size.bracket_order(s))
 
     def test_missing_plan_and_weights_only_flags(self):
@@ -243,7 +252,7 @@ class PlanRules(unittest.TestCase):
 
 
 class WeightsMode(unittest.TestCase):
-    """v1's split, kept behind --weights / --targets: $5,000, 10% cash, 25% cap."""
+    """v1's split, kept behind --weights / --targets: ₹5,000, 10% cash, 25% cap."""
 
     def check_reel(self, r):
         self.assertEqual(dollars(r), REEL_V1)

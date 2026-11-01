@@ -9,8 +9,7 @@ from _load import ROOT
 SKILLS = ["nse-scanner", "nse-news", "nse-entry", "nse-exit", "nse-timemachine",
           "nse-risk", "nse-budget", "nse-broker", "nse-alerts", "nse-results",
           "nse-insider"]
-ABOUT = ("11 Claude skills for day trading: scan thousands of charts, track breaking news, time every "
-         "entry and exit, and replay every outcome before you risk a dollar.")
+ABOUT = ('11 Claude skills for day trading Indian stocks on NSE and BSE: scan every listed stock, track news, time entries and exits, count Indian charges, and replay every outcome before you risk a rupee.')
 # skills on the way to an order carry the safety block
 ORDER_PATH = ["nse-scanner", "nse-entry", "nse-exit", "nse-timemachine", "nse-budget",
               "nse-insider", "nse-risk", "nse-broker", "nse-alerts"]
@@ -71,7 +70,7 @@ class Repo(unittest.TestCase):
     def test_readme_carries_the_reel_copy(self):
         with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as fh:
             readme = " ".join(fh.read().split())
-        self.assertTrue(readme.startswith("# The Day Trader skill"))
+        self.assertTrue(readme.startswith("# NSE BSE Trading skills"))
         for line in (ABOUT,
                      "https://github.com/Aayush2605/nse-bse-trading install skill",
                      "/plugin marketplace add Aayush2605/nse-bse-trading",

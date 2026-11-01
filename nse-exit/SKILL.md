@@ -30,11 +30,11 @@ and a neat plan does not change that.
 python3 "${CLAUDE_SKILL_DIR}/exit.py" plan                          # trader/entry.json: midpoint stop, 2R target
 python3 "${CLAUDE_SKILL_DIR}/exit.py" plan --stop or-mid --target 1R --write
 python3 "${CLAUDE_SKILL_DIR}/exit.py" plan --stop atr:1.5           # needs the session's bars (Yahoo or --offline)
-python3 "${CLAUDE_SKILL_DIR}/exit.py" plan --symbol TSLA --entry 364.18 --or-high 362.18 --or-low 354.47
+python3 "${CLAUDE_SKILL_DIR}/exit.py" plan --symbol ICICIBANK --entry 1394.50 --or-high 1390.90 --or-low 1383.40
 python3 "${CLAUDE_SKILL_DIR}/exit.py" show                          # the current trader/plan.json
 ```
 
-Other flags: `--flat-by 15:15`, `--json`, `--now "2026-10-19 10:15"` (New
+Other flags: `--flat-by 15:15`, `--json`, `--now "2026-10-30 09:35"` (New
 York time), `--entry PRICE` with a waiting entry.json to plan ahead, `--setup
 level`, `--offline FILE` (a saved Yahoo chart JSON for an ATR stop).
 
@@ -88,22 +88,23 @@ A level setup has no opening range to lean on, so it needs a stop you name.
 
 ## Example: the reel
 
-TSLA, Monday 2026-10-19. The entry is 364.18 at 10:15 AM (the 10:10 bar,
-bar 8) and the opening range is 354.47 to 362.18. `exit.py plan --stop
+ICICIBANK, Friday 2026-10-30. The entry is 1394.50 at 9:35 AM (the 9:30
+bar, bar 3) and the opening range is 1383.40 to 1390.90. `exit.py plan --stop
 or-mid --target 1R --write`:
 
 ```
-Exit plan: TSLA long, Mon 2026-10-19, opening-range breakout on 5-minute bars
-  Entry         $364.18 at 10:15 AM (bar 8)
-  Stop          $358.32  opening-range midpoint: ($362.18 + $354.47) / 2 = $358.325, rounded down
-  Target        $370.04  1R (one times the risk)
-  Risk a share  $5.86 (1.61% of the entry)
+Exit plan: ICICIBANK.NS long, Fri 2026-10-30, opening-range breakout on 5-minute bars
+  Entry         ₹1,394.50 at 9:35 AM (bar 3)
+  Stop          ₹1,387.15  opening-range midpoint: (₹1,390.90 + ₹1,383.40) / 2 = ₹1387.15
+  Target        ₹1,401.85  1R (one times the risk)
+  Risk a share  ₹7.35 (0.53% of the entry)
   Reward:risk   1.0
   Flat by       15:15 IST, win or lose: no overnight hold
 ```
 
-The default 2R target would be 364.18 + 2 x 5.86 = 375.90. nse-budget then
-sizes it: a $50 max loss per trade buys floor(50 / 5.86) = 8 shares.
+The default 2R target would be 1394.50 + 2 x 7.35 = 1409.20. nse-budget then
+sizes it: a ₹500 max loss per trade buys at most floor(500 / 7.35) = 68
+shares, fewer once the charges are counted.
 
 ## Rules
 
@@ -126,7 +127,8 @@ make a plan pass, and never calls a stop a guarantee.
 - Paper trading by default (`"paper": true`). Going live is the user's own decision, in their own config.
 - Nothing in this pack places an order except nse-broker, and only when all three hold: nse-risk
   passed that exact order today, the user typed an explicit yes for that one order in the chat, and the
-  user clicked Allow once on Claude's own card because the order tool is set to "Needs approval"
+  user clicked Allow once on Claude's own card (live; paper fills are simulated here) because the
+  order tool is set to "Needs approval"
   (Customize > Connectors > tool permissions). Never set an order tool to "Always allow".
 - No options, margin, short selling or leverage unless the config allows it and the user confirms.
 - Broker keys live in environment variables or the Claude Desktop config, never in the chat.

@@ -9,7 +9,7 @@ description: >-
   and how far, triggered with the time and the price, expired, or not open
   yet, and writes trader/entry.json for /nse-exit. Long side only. It never
   places an order. Use when the user says "tell me when to get in", "watch
-  TSLA", "has it broken out", "did it break the opening range", "entry
+  ICICIBANK", "has it broken out", "did it break the opening range", "entry
   signal", "time my entry", "check my watchlist", or after /nse-scanner
   and /nse-news, before /nse-exit.
 argument-hint: "[TICKER] [--setup orb|level] [--interval 5m|1m]"
@@ -27,17 +27,17 @@ people money, and a clean signal does not change that.
 `${CLAUDE_SKILL_DIR}` below is this skill's folder (where this SKILL.md lives).
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/entry.py" check TSLA                  # 15-minute opening range, 5-minute bars
-python3 "${CLAUDE_SKILL_DIR}/entry.py" check TSLA --write          # also save trader/entry.json
-python3 "${CLAUDE_SKILL_DIR}/entry.py" check TSLA --setup level --level 371.20
-python3 "${CLAUDE_SKILL_DIR}/entry.py" check TSLA --interval 1m --min-volume-x 1.5
-python3 "${CLAUDE_SKILL_DIR}/entry.py" watch TSLA --until 15:30    # one line per closed bar, stops on the trigger
+python3 "${CLAUDE_SKILL_DIR}/entry.py" check ICICIBANK             # 15-minute opening range, 5-minute bars
+python3 "${CLAUDE_SKILL_DIR}/entry.py" check ICICIBANK --write     # also save trader/entry.json
+python3 "${CLAUDE_SKILL_DIR}/entry.py" check ICICIBANK --setup level --level 1400
+python3 "${CLAUDE_SKILL_DIR}/entry.py" check ICICIBANK --interval 1m --min-volume-x 1.5
+python3 "${CLAUDE_SKILL_DIR}/entry.py" watch ICICIBANK --until 14:45 # one line per closed bar, stops on the trigger
 python3 "${CLAUDE_SKILL_DIR}/entry.py" watchlist                   # every hit in trader/watchlist.json
 ```
 
 Other flags: `--or-minutes N` (default 15), `--json`, `--offline FILE` (a
 saved Yahoo chart JSON, `.json` or `.json.gz`, or a folder of
-`<TICKER>.json`), `--now "2026-10-19 10:15"` (India time (IST)) to replay a day.
+`<TICKER>.json`), `--now "2026-10-30 09:35"` (India time (IST)) to replay a day.
 `watch` with `--now` or `--offline` runs on a simulated clock and replays the
 day bar by bar without waiting.
 
@@ -59,7 +59,7 @@ day bar by bar without waiting.
 - **The trigger** is the first completed bar after the range that CLOSES
   above the level. A wick above is not a trigger. A close exactly at the
   level is not above it.
-- **The time** is that bar's close time (the 10:10 bar closes at 10:15 AM).
+- **The time** is that bar's close time (the 9:30 bar closes at 9:35 AM).
   The price is its close, to the cent.
 - **Only closed bars count.** A bar is closed when the clock passes its start
   plus 5 (or 1) minutes and Yahoo has caught up to that moment (it waits a
@@ -91,28 +91,28 @@ day bar by bar without waiting.
 5. Hand off to `/nse-exit` to set the stop and the target BEFORE anything
    is bought.
 
-## Example: the reel
+## Example
 
-TSLA, Monday 2026-10-19, 5-minute bars. The opening range is 354.47 to
-362.18. At 10:12 the 10:10 bar is still open, so it waits:
-
-```
-WAITING  last close $361.68 (10:05 bar), $0.50 under the range high $362.18 (-0.14%).
-The 10:10 bar is still forming ($364.18 so far, closes 10:15 AM); it does not count until it closes.
-```
-
-At 10:15 the bar has closed:
+ICICIBANK, Friday 2026-10-30, 5-minute bars. The opening range (9:15 to 9:30)
+is 1383.40 to 1390.90. At 9:33 the 9:30 bar is still open, so it waits:
 
 ```
-TSLA  Mon 2026-10-19 10:15 IST  opening-range breakout (15-minute range) on 5-minute bars (Yahoo, free, can lag)
-Opening range 9:30-9:45: high $362.18, low $354.47 (3 of 3 bars).
-TRIGGERED 10:15 AM at $364.18: the 10:10 bar (bar 8) closed above the range high $362.18 (+0.55%).
+WAITING  last close ₹1389.80 (9:25 bar), ₹1.10 under the range high ₹1390.90 (-0.08%).
+The 9:30 bar is still forming (₹1394.50 so far, closes 9:35 AM); it does not count until it closes.
+```
+
+At 9:35 the bar has closed:
+
+```
+ICICIBANK.NS  Fri 2026-10-30 09:35 IST  opening-range breakout (15-minute range) on 5-minute bars (Yahoo, free, can lag)
+Opening range 9:15-9:30: high ₹1390.90, low ₹1383.40 (3 of 3 bars).
+TRIGGERED 9:35 AM at ₹1394.50: the 9:30 bar (bar 3) closed above the range high ₹1390.90 (+0.26%).
 This is the moment to get in, if you take the trade. Nothing was placed.
 Next: set the stop and target BEFORE you buy: /nse-exit (exit.py plan --from trader/entry.json).
 ```
 
-With `--min-volume-x 1` the 10:10 bar is too thin (0.60x the range's volume)
-and the trigger moves to 10:35 AM at 365.75 (the 10:30 bar, 7.98x).
+With `--min-volume-x 1` it still triggers on the same bar: the 9:30 bar
+traded 1.25x the opening range's volume.
 
 ## Rules
 
@@ -138,7 +138,8 @@ watch: nobody is there to say yes.
 - Paper trading by default (`"paper": true`). Going live is the user's own decision, in their own config.
 - Nothing in this pack places an order except nse-broker, and only when all three hold: nse-risk
   passed that exact order today, the user typed an explicit yes for that one order in the chat, and the
-  user clicked Allow once on Claude's own card because the order tool is set to "Needs approval"
+  user clicked Allow once on Claude's own card (live; paper fills are simulated here) because the
+  order tool is set to "Needs approval"
   (Customize > Connectors > tool permissions). Never set an order tool to "Always allow".
 - No options, margin, short selling or leverage unless the config allows it and the user confirms.
 - Broker keys live in environment variables or the Claude Desktop config, never in the chat.

@@ -11,9 +11,10 @@ import unittest
 import urllib.error
 from contextlib import redirect_stdout, redirect_stderr
 
+from _us_clock import us_clock
 from _load import load, FIX
 
-tm = load("nse-timemachine", "timemachine")
+tm = us_clock(load("nse-timemachine", "timemachine"))
 
 DIR = os.path.join(FIX, "nse-timemachine")
 TSLA = os.path.join(DIR, "TSLA-60d5m.json.gz")   # Yahoo v8 chart, range=60d interval=5m, fetched 2026-10-19 10:49 ET
@@ -28,7 +29,7 @@ PLAN = {"created_by": "nse-exit", "symbol": "TSLA", "side": "buy", "date": "2026
         "opening_range": {"high": 362.18, "low": 354.47, "minutes": 15},
         "stop": 358.32, "stop_rule": "or_mid", "stop_label": "opening-range midpoint",
         "target": 370.04, "target_r": 1.0, "target_label": "1R (one times the risk)",
-        "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:15"}
+        "risk_per_share": 5.86, "reward_risk": 1.0, "flat_by": "15:55"}
 
 # fingerprints of the reel's refs/sim-out.json (sim.py mid 1, seed 19): proves bit-for-bit equality
 SIM_BANDS = "b9b7c006a733c68b"
@@ -352,7 +353,7 @@ class Plans(unittest.TestCase):
         self.assertIn("still open at 3:55 PM", "\n".join(tm.report(doc)))
         self.assertEqual(machine(until="3:55 PM", replays=500)["mc"], m)
         for bad, words in (("10:15 AM", "nothing to replay"), ("16:05", "no later than 4:00 PM"),
-                           ("15:57", "5-minute grid"), ("noon", "New York time")):
+                           ("15:57", "5-minute grid"), ("noon", "India time (IST)")):
             with self.assertRaises(tm.TMError) as cm:
                 machine(until=bad, replays=10)
             self.assertIn(words, str(cm.exception), bad)
