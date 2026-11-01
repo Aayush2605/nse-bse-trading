@@ -22,6 +22,5 @@
   "allow_options": false,
   "allow_margin": false,
   "allow_short": false,
-  "pdt_guard": false,
-  "sec_user_agent": "Your Name you@example.com"
+  "pdt_guard": false
 }

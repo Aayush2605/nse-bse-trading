@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:in-bse-fin="x">
+<in-capmkt:RevenueFromOperations contextRef="OneD" decimals="-7" unitRef="INR">731880000000</in-capmkt:RevenueFromOperations>
+<in-capmkt:ProfitLossForPeriod contextRef="OneD" decimals="-7" unitRef="INR">139340000000</in-capmkt:ProfitLossForPeriod>
+<in-capmkt:BasicEarningsLossPerShareFromContinuingOperations contextRef="OneD" decimals="INF" unitRef="INRPerShare">38.37</in-capmkt:BasicEarningsLossPerShareFromContinuingOperations>
+<in-capmkt:RevenueFromOperations contextRef="FourD" decimals="-7" unitRef="INR">1454630000000</in-capmkt:RevenueFromOperations>
+<in-capmkt:ProfitLossForPeriod contextRef="FourD" decimals="-7" unitRef="INR">273540000000</in-capmkt:ProfitLossForPeriod>
+<in-capmkt:BasicEarningsLossPerShareFromContinuingOperations contextRef="FourD" decimals="INF" unitRef="INRPerShare">75.27</in-capmkt:BasicEarningsLossPerShareFromContinuingOperations>
+</xbrli:xbrl>

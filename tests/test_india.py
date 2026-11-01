@@ -18,6 +18,9 @@ risk = load("nse-risk", "check")
 tm = load("nse-timemachine", "timemachine")
 size = load("nse-budget", "size")
 ticket = load("nse-broker", "ticket")
+news = load("nse-news", "news")
+results = load("nse-results", "results")
+insider = load("nse-insider", "insider")
 
 IDIR = os.path.join(FIX, "india")
 ICICI = os.path.join(IDIR, "ICICIBANK-2026-10-30-5m.json")
@@ -169,6 +172,52 @@ class Broker(unittest.TestCase):
         with open(ICICI) as fh:
             real = json.load(fh)
         self.assertTrue(real["chart"]["result"][0]["timestamp"])
+
+
+def fixture(name, mode="r"):
+    with open(os.path.join(IDIR, name), mode) as fh:
+        return fh.read()
+
+
+class IndianSources(unittest.TestCase):
+    def test_nse_announcements(self):
+        items = news.parse_nse_announcements(fixture("nse-TCS-announcements.json"), "TCS")
+        self.assertEqual(len(items), 3)
+        self.assertEqual(items[0]["source"], "NSE filing")
+        self.assertTrue(items[0]["title"].startswith("Tata Consultancy Services Limited: "))
+        self.assertEqual(items[0]["time"].tzinfo, datetime.timezone.utc)       # IST stamp converted
+        self.assertEqual(news.nse_symbol("XYZ-SM.NS"), "XYZ")
+        self.assertIsNone(news.nse_symbol("TCS.BO"))
+
+    def test_google_news_headlines(self):
+        items = news.parse_rss(fixture("news-ICICIBANK.xml", "rb"), "ICICIBANK")
+        self.assertEqual(len(items), 2)
+        self.assertNotEqual(items[0]["source"], "Google News")                # the publisher's name
+
+    def test_results_from_xbrl(self):
+        f = results.quarter_facts(fixture("TCS-2026-09-30.xml"))
+        self.assertEqual((f["revenue"], f["profit"], f["eps"]), (731880000000.0, 139340000000.0, 38.37))
+        rows = json.loads(fixture("TCS-filings.json"))["data"]
+        picks = results.pick_filings(rows)
+        self.assertEqual([(q.isoformat(), r["consolidated"]) for q, r in picks],
+                         [("2026-09-30", "Consolidated"), ("2026-06-30", "Consolidated")])
+        self.assertEqual(results.label(datetime.date(2026, 9, 30)), "Q2 FY27")
+        self.assertEqual(results.label(datetime.date(2027, 3, 31)), "Q4 FY27")
+        q = [(datetime.date(2026, 9, 30), {"revenue": 110.0, "profit": 12.0, "eps": 2}, "Consolidated"),
+             (datetime.date(2026, 6, 30), {"revenue": 100.0, "profit": 10.0, "eps": 2}, "Consolidated"),
+             (datetime.date(2025, 9, 30), {"revenue": 88.0, "profit": 10.0, "eps": 2}, "Consolidated")]
+        top = results.summarize(q)[0]
+        self.assertEqual((top["revenue_qoq"], top["revenue_yoy"], top["profit_yoy"]), (10.0, 25.0, 20.0))
+
+    def test_insider_trades_and_deals(self):
+        trades = insider.parse_pit(json.loads(fixture("pit-RELIANCE.json")))
+        self.assertEqual(len(trades), 4)
+        self.assertEqual(trades[0]["symbol"], "RELIANCE")
+        self.assertEqual(insider.parse_pit(json.loads(fixture("pit-RELIANCE.json")), market_only=True), [])
+        as_on, deals = insider.parse_deals(json.loads(fixture("deals.json")))
+        self.assertEqual(as_on, "30-Oct-2026")
+        self.assertEqual(deals[0]["symbol"], "SWIGGY")                          # largest first
+        self.assertEqual(len(insider.parse_deals(json.loads(fixture("deals.json")), {"ANNAPURNA"})[1]), 2)
 
 
 if __name__ == "__main__":

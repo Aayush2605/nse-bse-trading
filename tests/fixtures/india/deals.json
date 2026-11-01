@@ -1,0 +1,57 @@
+{
+ "as_on_date": "30-Oct-2026",
+ "BULK_DEALS_DATA": [
+  {
+   "buySell": "BUY",
+   "clientName": "QE SECURITIES LLP",
+   "date": "30-Oct-2026",
+   "name": "Aeroflex Industries Ltd",
+   "qty": "670611",
+   "remarks": "-",
+   "symbol": "AEROFLEX",
+   "watp": "540.12"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "PROGNOSIS SECURITIES PVT. LTD",
+   "date": "30-Oct-2026",
+   "name": "Annapurna Swadisht Ltd",
+   "qty": "167387",
+   "remarks": "-",
+   "symbol": "ANNAPURNA",
+   "watp": "123.24"
+  },
+  {
+   "buySell": "BUY",
+   "clientName": "ATLAS EVENTS PRIVATE LIMITED",
+   "date": "30-Oct-2026",
+   "name": "Annapurna Swadisht Ltd",
+   "qty": "167104",
+   "remarks": "-",
+   "symbol": "ANNAPURNA",
+   "watp": "110.2"
+  }
+ ],
+ "BLOCK_DEALS_DATA": [
+  {
+   "buySell": "BUY",
+   "clientName": "BOFA SECURITIES EUROPE SA",
+   "date": "30-Oct-2026",
+   "name": "Tata Motors Limited",
+   "qty": "1300000",
+   "remarks": null,
+   "symbol": "TMCV",
+   "watp": "397"
+  },
+  {
+   "buySell": "SELL",
+   "clientName": "TENCENT CLOUD EUROPE B.V.",
+   "date": "30-Oct-2026",
+   "name": "Swiggy Limited",
+   "qty": "54347662",
+   "remarks": null,
+   "symbol": "SWIGGY",
+   "watp": "180.65"
+  }
+ ]
+}
