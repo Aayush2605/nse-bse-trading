@@ -5,9 +5,10 @@ This tool never talks to a broker and never places anything. It does its
 work around the one moment that matters, your yes:
 
   show      renders each proposed order as a plain-English ticket plus the
-            exact JSON Claude will send to Alpaca's place_stock_order tool.
-            A bracket order shows its stop-loss, take-profit and the max loss
-            at the stop. An order is READY only if nse-risk passed THIS
+            exact JSON Claude will send to Zerodha Kite's place_order tool.
+            Kite has no bracket orders: a bracket becomes the MIS entry, then
+            an SL-M stop placed once the entry fills; the target is watched by
+            nse-alerts and taken with a flatten ticket. An order is READY only if nse-risk passed THIS
             exact order today (matched by fingerprint) and nobody has decided
             on it yet.
   approve   records your explicit yes for ONE order, with your reply word for
@@ -19,6 +20,11 @@ work around the one moment that matters, your yes:
   fill      records a fill in trader/portfolio.json (cash and shares).
   flatten   builds a sell ticket that closes a symbol's open position by
             flat_by. It still goes through nse-risk and your yes.
+  paper     "paper": true (the default): fills an approved order HERE, at the
+            latest Yahoo price or --price. Nothing goes to Zerodha.
+  paper-check  walks today's 1-minute bars for every open paper trade: the
+            stop, the target or the flat-by time closes it, and it prints the
+            profit or loss after Indian charges.
   log       prints today's decisions.
 
     python3 ticket.py show                    # every order, READY or not
@@ -28,6 +34,8 @@ work around the one moment that matters, your yes:
     python3 ticket.py fill --symbol TSLA --side buy --qty 8 --price 364.20
     python3 ticket.py flatten --symbol TSLA --qty 8
     python3 ticket.py log
+    python3 ticket.py paper --index 1           # pretend fill of an approved order
+    python3 ticket.py paper-check               # stop / target / flat-by for open paper trades
 
 Everything is written to trader/state/broker.json (append only). Dates are
 IST dates; --now "2026-10-19 10:15" pins the clock.
@@ -150,7 +158,7 @@ def _f(x):
 
 
 def tool_input(order):
-    """The exact arguments for place_stock_order: Alpaca's parameter names,
+    """The internal order fields (the shape nse-budget writes and nse-risk fingerprints),
     numbers as strings (its signature types qty, notional and prices as str).
     "why" and "plan" are ours and are never sent."""
     out = {}
@@ -158,6 +166,39 @@ def tool_input(order):
         if k in order and order[k] is not None:
             out[k] = _str_num(order[k]) if k in STRING_FIELDS else order[k]
     return out
+
+
+KITE_TYPES = {"market": "MARKET", "limit": "LIMIT", "stop": "SL-M", "stop_limit": "SL"}
+
+
+def kite_symbol(sym):
+    """RELIANCE / RELIANCE.NS -> (NSE, RELIANCE); TCS.BO -> (BSE, TCS); XYZ-SM.NS -> (NSE, XYZ-SM)."""
+    s = sym.upper()
+    if s.endswith(".BO"):
+        return "BSE", s[:-3]
+    return "NSE", s[:-3] if s.endswith(".NS") else s
+
+
+def kite_calls(order):
+    """The place_order calls for one order, in order: [(when, args)].
+    An intraday (MIS) entry, then for a bracket the SL-M stop-loss once it fills."""
+    exch, tsym = kite_symbol(str(order.get("symbol", "")))
+    side = "BUY" if str(order.get("side")).lower() == "buy" else "SELL"
+    typ = str(order.get("type", "market")).lower()
+    q = int(round(_f(order.get("qty")) or 0))
+    base = {"variety": "regular", "exchange": exch, "tradingsymbol": tsym, "quantity": q, "product": "MIS",
+            "validity": "DAY"}
+    first = dict(base, transaction_type=side, order_type=KITE_TYPES.get(typ, "MARKET"))
+    if typ in ("limit", "stop_limit") and _f(order.get("limit_price")):
+        first["price"] = _f(order["limit_price"])
+    if typ in ("stop", "stop_limit") and _f(order.get("stop_price")):
+        first["trigger_price"] = _f(order["stop_price"])
+    calls = [("now", first)]
+    if is_bracket(order) and _f(order.get("stop_loss_stop_price")):
+        calls.append(("after the entry fills", dict(base, transaction_type="SELL" if side == "BUY" else "BUY",
+                                                    order_type="SL-M",
+                                                    trigger_price=_f(order["stop_loss_stop_price"]))))
+    return calls
 
 
 def _money(v):
@@ -335,10 +376,9 @@ def kind_of(order, rv):
 
 def render(order, idx, total, cfg, risk, state, today):
     ready, label, rv = status_of(order, risk, state, today)
-    broker = str(cfg.get("broker", "alpaca")).lower()
     paper = cfg.get("paper", True)
-    acct = "PAPER account" if paper else "LIVE ACCOUNT, REAL MONEY"
-    lines = ["ORDER %d of %d, %s, %s" % (idx, total, acct, "Interactive Brokers" if broker == "ibkr" else "Alpaca")]
+    acct = "PAPER (simulated here, nothing goes to Zerodha)" if paper else "LIVE ZERODHA ACCOUNT, REAL MONEY"
+    lines = ["ORDER %d of %d, %s" % (idx, total, acct)]
     for part in plain_parts(order):
         lines.append("  " + part)
     if order.get("why"):
@@ -346,19 +386,18 @@ def render(order, idx, total, cfg, risk, state, today):
     lines.append("  " + label)
     for w in (rv or {}).get("warnings", []):
         lines.append("  note: " + w)
-    if broker == "ibkr":
-        lines.append("  Claude drafts this with the Interactive Brokers connector. IBKR sends it to your")
-        lines.append("  IBKR account, and it only goes to the market after you approve it there.")
-    else:
-        lines.append("  Claude will call place_stock_order with exactly:")
-        for l in json.dumps(tool_input(order), indent=2).splitlines():
-            lines.append("    " + l)
-        if is_bracket(order):
-            lines.append("  Alpaca places the entry, then the stop-loss and the take-profit as two orders")
-            lines.append("  that cancel each other: when one fills, the other is canceled.")
+    if paper:
+        lines.append("  On a yes, ticket.py paper fills it here at the latest price. Live, it would be:")
+    for when, args in kite_calls(order):
+        lines.append("  Kite place_order (%s):" % when)
+        lines.append("    " + json.dumps(args))
+    if is_bracket(order) and order.get("take_profit_limit_price") is not None:
+        lines.append("  Kite has no bracket orders. The target %s is not sent: nse-alerts rings when it"
+                     % _p(order["take_profit_limit_price"]))
+        lines.append("  is hit, then a flatten ticket cancels the stop and sells.")
     if ready:
         lines.append("  Reply \"yes\" to place this one order, or \"no\" to skip it.")
-        if broker != "ibkr":
+        if not paper:
             lines.append("  Claude's own card then asks again: Allow once places it, Deny stops it.")
     return "\n".join(lines), ready
 
@@ -368,8 +407,9 @@ def ticket_json(order, idx, cfg, risk, state, today):
     loss, stop = max_loss(order)
     return {"index": idx, "ready": ready, "status": label, "plain": plain(order),
             "fingerprint": fingerprint(order), "paper": bool(cfg.get("paper", True)),
-            "broker": cfg.get("broker", "alpaca"), "tool": "place_stock_order",
-            "tool_input": tool_input(order), "why": order.get("why", ""),
+            "broker": cfg.get("broker", "zerodha"), "tool": "place_order",
+            "tool_input": tool_input(order), "kite_calls": [{"when": w, "args": a} for w, a in kite_calls(order)],
+            "why": order.get("why", ""),
             "bracket": is_bracket(order), "max_loss": loss, "stop": stop}
 
 
@@ -496,15 +536,16 @@ def cmd_approve(a):
            "symbol": str(order.get("symbol", "")).upper(), "side": order.get("side"),
            "qty": order.get("qty"), "kind": kind_of(order, rv), "max_loss": loss, "stop": stop,
            "plain": plain(order), "status": "approved", "reply": a.reply,
-           "paper": bool(cfg.get("paper", True)), "broker": cfg.get("broker", "alpaca")}
+           "paper": bool(cfg.get("paper", True)), "broker": cfg.get("broker", "zerodha")}
     state.setdefault("orders", []).append(rec)
     write_json(a.state, state)
     print("Recorded your yes for order %d: %s." % (a.index, plain(order)))
-    if str(cfg.get("broker", "alpaca")).lower() == "ibkr":
-        print("Now draft it with the Interactive Brokers connector; approve it in your IBKR account.")
+    if cfg.get("paper", True):
+        print("Paper trading: now run ticket.py paper --index %d (it fills here; nothing goes to Zerodha)." % a.index)
     else:
-        print("Now call place_stock_order with exactly:")
-        print(json.dumps(tool_input(order), indent=2))
+        for when, args in kite_calls(order):
+            print("Kite place_order (%s):" % when)
+            print(json.dumps(args, indent=2))
         print("Claude's card shows Allow once / Deny. Then: ticket.py result --index %d --status "
               "placed|denied|failed" % a.index)
     return 0
@@ -606,9 +647,140 @@ def cmd_flatten(a):
     print("  1. nse-risk: check.py. A sell that only closes what you hold is never blocked by the daily")
     print("     limits or the entry window.")
     print("  2. ticket.py show, then the user's yes for this one order.")
-    print("  3. If the bracket's stop-loss and take-profit are still open, Alpaca holds these shares for them")
-    print("     and rejects a new sell. Cancel them first: get_orders (status open, nested true), then")
-    print("     cancel_order_by_id for each open leg (Needs approval). Then place_stock_order with the ticket.")
+    print("  3. Paper: ticket.py paper --index 1. Live: cancel the open SL-M stop first (get_orders, then")
+    print("     cancel_order, Needs approval), or it would sell again and leave you short. Then place_order.")
+    return 0
+
+
+def yahoo_bars(sym, day, offline=None):
+    """Today's 1-minute bars for sym: [(ist datetime, o, h, l, c)]. offline = a Yahoo chart JSON file."""
+    if offline:
+        with open(offline, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    else:
+        import urllib.parse
+        import urllib.request
+        s = sym.upper() if "." in sym or sym.startswith("^") else sym.upper() + ".NS"
+        url = "https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1m" % urllib.parse.quote(s)
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                doc = json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            raise TicketError("could not get %s's bars from Yahoo: %s" % (s, e))
+    res = ((doc.get("chart") or {}).get("result") or [None])[0] or {}
+    q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
+    out = []
+    for i, t in enumerate(res.get("timestamp") or []):
+        o, h, l, c = (q.get(k, [None] * (i + 1))[i] for k in ("open", "high", "low", "close"))
+        if None in (o, h, l, c):
+            continue
+        at = to_ist(datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=int(t)))
+        if at.date().isoformat() == day:
+            out.append((at, float(o), float(h), float(l), float(c)))
+    return out
+
+
+def charges_of(qty, buy, sell):
+    """Indian intraday charges from nse-budget, or None if that skill is not next to this one."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nse-budget", "size.py")
+    if not os.path.exists(path):
+        return None
+    spec = importlib.util.spec_from_file_location("nse_size", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.charges(qty, buy, sell)["total"]
+
+
+def paper_exit(trade, bars, now_ist=None):
+    """(reason, price, at) where an open long paper trade ends, or None if it is still open.
+    Only bars that have closed by now_ist count.
+    A bar that touches both the stop and the target counts as the stop (the cautious guess)."""
+    start = datetime.datetime.fromisoformat(trade["at"][:19])
+    fh, fm = (int(x) for x in trade["flat_by"].split(":"))
+    for at, o, h, l, c in bars:
+        if at < start.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1):
+            continue
+        if now_ist and at + datetime.timedelta(minutes=1) > now_ist:
+            break
+        if (at.hour, at.minute) >= (fh, fm):
+            return "flat by %s" % trade["flat_by"], o, at
+        if l <= trade["stop"]:
+            return "stop", min(o, trade["stop"]), at          # a gap below the stop fills at the open
+        if trade.get("target") and h >= trade["target"]:
+            return "target", max(o, trade["target"]), at
+    return None
+
+
+def cmd_paper(a):
+    orders, cfg, risk, state, today, now = _load(a)
+    if not cfg.get("paper", True):
+        raise TicketError("\"paper\" is false in the config: this is a live account, use place_order")
+    order = _pick(orders, a.index)
+    fp = fingerprint(order)
+    rec = latest(state, fp, today)
+    if not rec or rec.get("status") != "approved":
+        raise TicketError("order %d has no yes recorded today: ticket.py approve first" % a.index)
+    price = _f(a.price)
+    if price is None:
+        bars = yahoo_bars(order["symbol"], today, a.offline)
+        if not bars:
+            raise TicketError("no bars for %s today: pass --price" % order["symbol"])
+        price = bars[-1][4]
+    qty = int(round(_f(order.get("qty")) or 0))
+    side = str(order.get("side")).lower()
+    apply_fill(a.portfolio, cfg, order["symbol"], side, qty, price, today)
+    log_fill(a.state, now, today, order["symbol"], side, qty, price)
+    state = load_state(a.state)
+    state["orders"].append({"at": ist_iso(now), "date": today, "index": a.index, "fingerprint": fp,
+                            "symbol": rec["symbol"], "side": side, "plain": rec["plain"], "status": "placed",
+                            "kind": rec.get("kind"), "max_loss": rec.get("max_loss"), "stop": rec.get("stop"),
+                            "qty": rec.get("qty"), "broker_order_id": "PAPER-" + fp[:8], "paper": True})
+    plan = order.get("plan") or {}
+    if side == "buy" and rec.get("stop"):
+        state.setdefault("paper_open", []).append({
+            "symbol": rec["symbol"], "qty": qty, "entry": price, "stop": float(rec["stop"]),
+            "target": _f(order.get("take_profit_limit_price")) or _f(plan.get("target")),
+            "flat_by": plan.get("flat_by") or cfg.get("flat_by") or "15:15", "date": today,
+            "at": to_ist(now).isoformat()})
+    elif side == "sell":
+        state["paper_open"] = [t for t in state.get("paper_open", []) if t["symbol"] != rec["symbol"]]
+    write_json(a.state, state)
+    print("PAPER fill: %s %d %s at %s (simulated; nothing went to Zerodha)." % (side.upper(), qty, rec["symbol"], _p(price)))
+    if side == "buy":
+        print("Next: ticket.py paper-check (now and then) closes it at the stop, the target or %s."
+              % (plan.get("flat_by") or cfg.get("flat_by") or "15:15"))
+    return 0
+
+
+def cmd_paper_check(a):
+    cfg = read_json(a.config, "config", required=False) or {}
+    now, today = _clock(a)
+    state = load_state(a.state)
+    open_ = [t for t in state.get("paper_open", []) if t["date"] == today]
+    if not open_:
+        print("No open paper trades today.")
+        return 1
+    still = [t for t in state.get("paper_open", []) if t["date"] != today]
+    for t in open_:
+        hit = paper_exit(t, yahoo_bars(t["symbol"], today, a.offline), to_ist(now))
+        if not hit:
+            print("%s: still open (entry %s, stop %s, target %s, flat by %s)."
+                  % (t["symbol"], _p(t["entry"]), _p(t["stop"]), _p(t["target"]) if t.get("target") else "-", t["flat_by"]))
+            still.append(t)
+            continue
+        why, px, at = hit
+        apply_fill(a.portfolio, cfg, t["symbol"], "sell", t["qty"], px, today)
+        log_fill(a.state, now, today, t["symbol"], "sell", t["qty"], px)
+        state = load_state(a.state)
+        gross = round((px - t["entry"]) * t["qty"], 2)
+        ch = charges_of(t["qty"], t["entry"], px)
+        net = "" if ch is None else ", net %s after %s charges" % (_money(gross - ch), _money(ch))
+        print("%s: closed at %s by the %s (%s IST). Gross %s%s. (paper)"
+              % (t["symbol"], _p(px), why, at.strftime("%H:%M"), _money(gross), net))
+    state["paper_open"] = still
+    write_json(a.state, state)
     return 0
 
 
@@ -657,7 +829,7 @@ def main(argv=None):
     common(p)
     p.add_argument("--index", type=int, required=True)
     p.add_argument("--reply")
-    p = sub.add_parser("result", help="record what happened after the Allow once / Deny card")
+    p = sub.add_parser("result", help="record what happened after the Allow once / Deny card (live)")
     common(p)
     p.add_argument("--index", type=int, required=True)
     p.add_argument("--status", required=True, choices=["placed", "denied", "failed"])
@@ -684,6 +856,18 @@ def main(argv=None):
     p.add_argument("--plan", default="trader/plan.json")
     p.add_argument("--config", default="trader/config.json")
     clock(p)
+    p = sub.add_parser("paper", help="pretend fill of an approved order (paper trading)")
+    common(p)
+    p.add_argument("--index", type=int, required=True)
+    p.add_argument("--price", help="fill price (default: the latest 1-minute close on Yahoo)")
+    p.add_argument("--offline", help="a Yahoo 1-minute chart JSON instead of the network")
+    p.add_argument("--portfolio", default="trader/portfolio.json")
+    p = sub.add_parser("paper-check", help="close open paper trades at their stop, target or flat-by time")
+    p.add_argument("--state", default="trader/state/broker.json")
+    p.add_argument("--config", default="trader/config.json")
+    p.add_argument("--portfolio", default="trader/portfolio.json")
+    p.add_argument("--offline", help="a Yahoo 1-minute chart JSON instead of the network")
+    clock(p)
     p = sub.add_parser("log", help="today's decisions")
     p.add_argument("--state", default="trader/state/broker.json")
     clock(p)
@@ -694,7 +878,8 @@ def main(argv=None):
         return 1
     try:
         return {"show": cmd_show, "approve": cmd_approve, "decline": cmd_decline, "result": cmd_result,
-                "fill": cmd_fill, "flatten": cmd_flatten, "log": cmd_log}[a.cmd](a)
+                "fill": cmd_fill, "flatten": cmd_flatten, "log": cmd_log, "paper": cmd_paper,
+                "paper-check": cmd_paper_check}[a.cmd](a)
     except TicketError as e:
         print("ticket.py: %s" % e, file=sys.stderr)
         return 1

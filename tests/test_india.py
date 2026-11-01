@@ -17,6 +17,7 @@ exitp = load("nse-exit", "exit")
 risk = load("nse-risk", "check")
 tm = load("nse-timemachine", "timemachine")
 size = load("nse-budget", "size")
+ticket = load("nse-broker", "ticket")
 
 IDIR = os.path.join(FIX, "india")
 ICICI = os.path.join(IDIR, "ICICIBANK-2026-10-30-5m.json")
@@ -143,6 +144,31 @@ class MarketRules(unittest.TestCase):
         rules = dict(self.RULES, prev_close_date="2026-10-28")
         w = risk.india_reasons("ABANSENT", 26.79, 26.0, rules, risk.DEFAULTS, "2026-11-02")[1]
         self.assertIn("refresh", w[0])
+
+
+class Broker(unittest.TestCase):
+    ORDER = {"symbol": "ICICIBANK.NS", "side": "buy", "qty": "26", "type": "market", "time_in_force": "day",
+             "order_class": "bracket", "take_profit_limit_price": "1401.85", "stop_loss_stop_price": "1387.15"}
+
+    def test_kite_calls_are_mis_entry_then_slm_stop(self):
+        (w1, entry), (w2, stop) = ticket.kite_calls(self.ORDER)
+        self.assertEqual(entry, {"variety": "regular", "exchange": "NSE", "tradingsymbol": "ICICIBANK", "quantity": 26,
+                                 "product": "MIS", "validity": "DAY", "transaction_type": "BUY", "order_type": "MARKET"})
+        self.assertEqual((stop["transaction_type"], stop["order_type"], stop["trigger_price"]), ("SELL", "SL-M", 1387.15))
+        self.assertEqual(w2, "after the entry fills")
+        self.assertEqual(ticket.kite_symbol("TCS.BO"), ("BSE", "TCS"))
+        self.assertEqual(ticket.kite_symbol("AXIOMGAS-SM.NS"), ("NSE", "AXIOMGAS-SM"))
+
+    def test_paper_exit_on_the_real_session(self):
+        bars = [(DT(2026, 10, 30, 9, 15) + datetime.timedelta(minutes=i), 100.0, 100.5, 99.5, 100.0) for i in range(370)]
+        trade = {"at": "2026-10-30T09:36:00", "entry": 100.0, "stop": 98.0, "target": 103.0, "flat_by": "15:15"}
+        self.assertEqual(ticket.paper_exit(trade, bars)[:2], ("flat by 15:15", 100.0))
+        bars[60] = (bars[60][0], 100.0, 103.5, 97.0, 100.0)                     # one bar touches both
+        self.assertEqual(ticket.paper_exit(trade, bars)[:2], ("stop", 98.0))
+        self.assertIsNone(ticket.paper_exit(trade, bars, DT(2026, 10, 30, 10, 0)))  # not yet seen at 10:00
+        with open(ICICI) as fh:
+            real = json.load(fh)
+        self.assertTrue(real["chart"]["result"][0]["timestamp"])
 
 
 if __name__ == "__main__":
